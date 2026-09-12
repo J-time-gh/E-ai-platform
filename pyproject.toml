@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "enterprise-ai-platform"
+name = "E-ai-platform"
 version = "0.1.0"
 description = "企业级大模型 AI 应用平台：RAG + Agent + LLM Gateway"
 readme = "README.md"

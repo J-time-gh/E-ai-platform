@@ -4,7 +4,7 @@
 >
 > An enterprise-grade LLM application platform featuring RAG, Agents and an LLM gateway.
 
-[![CI](https://github.com/J-time-gh/enterprise-ai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/J-time-gh/enterprise-ai-platform/actions/workflows/ci.yml)
+[![CI](https://github.com/J-time-gh/E-ai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/J-time-gh/E-ai-platform/actions/workflows/ci.yml)
 
 ## 项目简介
 
