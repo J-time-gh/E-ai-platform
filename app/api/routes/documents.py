@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile, status
 
+from app.db.session import DbSession
 from app.schemas.documents import DocumentInfo
 from app.services import document_store
 
@@ -13,7 +14,7 @@ MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
 
 @router.post("/upload", response_model=DocumentInfo, status_code=status.HTTP_201_CREATED)
-async def upload_document(file: UploadFile) -> DocumentInfo:
+async def upload_document(file: UploadFile, db: DbSession) -> DocumentInfo:
     """上传文档（当前仅保存元数据，阶段 3 加入解析与向量化）。"""
     filename = file.filename or "unnamed"
     suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
@@ -37,23 +38,23 @@ async def upload_document(file: UploadFile) -> DocumentInfo:
         content_type=file.content_type or "application/octet-stream",
         uploaded_at=datetime.now(UTC),
     )
-    return document_store.add(document)
+    return document_store.add(db, document)
 
 
 @router.get("", response_model=list[DocumentInfo])
-async def list_documents() -> list[DocumentInfo]:
-    return document_store.list_all()
+async def list_documents(db: DbSession) -> list[DocumentInfo]:
+    return document_store.list_all(db)
 
 
 @router.get("/{doc_id}", response_model=DocumentInfo)
-async def get_document(doc_id: str) -> DocumentInfo:
-    document = document_store.get(doc_id)
+async def get_document(doc_id: str, db: DbSession) -> DocumentInfo:
+    document = document_store.get(db, doc_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
     return document
 
 
 @router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document(doc_id: str) -> None:
-    if not document_store.delete(doc_id):
+async def delete_document(doc_id: str, db: DbSession) -> None:
+    if not document_store.delete(db, doc_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
