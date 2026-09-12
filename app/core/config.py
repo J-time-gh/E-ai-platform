@@ -15,5 +15,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
+    database_url: str
+    test_database_url: str
+    redis_url: str
+
 
 settings = Settings()

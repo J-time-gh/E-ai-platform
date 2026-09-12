@@ -8,6 +8,10 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg://app:ci@127.0.0.1:5432/e_ai_database
+      TEST_DATABASE_URL: postgresql+psycopg://app:ci@127.0.0.1:5432/e_ai_database_test
+      REDIS_URL: redis://127.0.0.1:6379/0
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
