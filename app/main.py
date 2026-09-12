@@ -1,0 +1,17 @@
+from fastapi import FastAPI
+
+from app.api.routes import health
+from app.core.config import settings
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    description="企业级大模型 AI 应用平台：RAG + Agent + LLM Gateway",
+)
+
+app.include_router(health.router)
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> dict[str, str]:
+    return {"message": f"Welcome to {settings.app_name}", "docs": "/docs"}
