@@ -1,0 +1,31 @@
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+# 一条对话消息
+class ChatMessage(BaseModel):
+    # 谁说的
+    role: Literal["user", "assistant", "system"]
+    # 内容是
+    content: str = Field(min_length=1)
+
+
+# 用户发来的请求
+class ChatRequest(BaseModel):
+    # 对话长度限制
+    message: str = Field(min_length=1, max_length=2000)
+    # 历史
+    # 执行过程：每来一个请求 → 创建新的 ChatRequest 实例 → Pydantic 发现没传 history
+    # → 调用一次 list() → 得到一个崭新的空列表。请求 A 和请求 B 拿到的永远是各不相同的列表，
+    # 互不影响。
+    # default_factory=list每次都会调用list()，而不是在类定义时就创建一个空列表，
+    # 这样可以避免多个实例共享同一个列表的问题。
+    history: list[ChatMessage] = Field(default_factory=list)
+
+
+# 接口返回的数据
+class ChatResponse(BaseModel):
+    # 回答内容
+    reply: str
+    model: str
