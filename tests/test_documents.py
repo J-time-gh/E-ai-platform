@@ -1,7 +1,10 @@
 import io
+from pathlib import Path
 
 import httpx
 from fastapi.testclient import TestClient
+
+from app.core.config import settings
 
 
 def _upload(
@@ -64,3 +67,17 @@ def test_delete_document(client: TestClient) -> None:
 
 def test_delete_missing_document_returns_404(client: TestClient) -> None:
     assert client.delete("/documents/nope").status_code == 404
+
+
+def test_upload_saves_file_to_disk(client: TestClient) -> None:
+    doc_id = _upload(client).json()["id"]
+    files = list(Path(settings.upload_dir).glob(f"{doc_id}*"))
+    assert len(files) == 1
+
+
+def test_delete_removes_file_from_disk(client: TestClient) -> None:
+    doc_id = _upload(client).json()["id"]
+    path = next(Path(settings.upload_dir).glob(f"{doc_id}*"))
+    assert path.exists()
+    assert client.delete(f"/documents/{doc_id}").status_code == 204
+    assert not path.exists()

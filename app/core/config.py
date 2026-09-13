@@ -19,5 +19,11 @@ class Settings(BaseSettings):
     test_database_url: str
     redis_url: str
 
+    upload_dir: str = "data/uploads"
+    embedding_model: str = "BAAI/bge-m3"
+    llm_base_url: str = "http://127.0.0.1:1234/v1"
+    llm_model: str = "qwen2.5-14b-instruct"
+    llm_api_key: str = "lm-studio"
+
 
 settings = Settings()

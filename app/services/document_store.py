@@ -16,13 +16,14 @@ def _to_info(row: Document) -> DocumentInfo:
     )
 
 
-def add(db: Session, document: DocumentInfo) -> DocumentInfo:
+def add(db: Session, document: DocumentInfo, stored_path: str | None = None) -> DocumentInfo:
     row = Document(
         id=document.id,
         filename=document.filename,
         size=document.size,
         content_type=document.content_type,
         uploaded_at=document.uploaded_at,
+        stored_path=stored_path,
     )
     db.add(row)
     db.commit()
@@ -47,3 +48,8 @@ def delete(db: Session, doc_id: str) -> bool:
     db.delete(row)
     db.commit()
     return True
+
+
+def get_stored_path(db: Session, doc_id: str) -> str | None:
+    row = db.get(Document, doc_id)
+    return row.stored_path if row is not None else None

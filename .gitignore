@@ -31,3 +31,4 @@ Desktop.ini
 
 # ---- 运行产物 ----
 *.log
+data/

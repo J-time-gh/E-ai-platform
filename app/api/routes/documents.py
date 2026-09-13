@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, status
 
 from app.db.session import DbSession
 from app.schemas.documents import DocumentInfo
-from app.services import document_store
+from app.services import document_store, file_store
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -31,14 +31,17 @@ async def upload_document(file: UploadFile, db: DbSession) -> DocumentInfo:
             detail="文件超过 20MB 限制",
         )
 
+    document_id = str(uuid4())
+    stored_path = file_store.save_file(document_id, suffix, content)
+
     document = DocumentInfo(
-        id=str(uuid4()),
+        id=document_id,
         filename=filename,
         size=len(content),
         content_type=file.content_type or "application/octet-stream",
         uploaded_at=datetime.now(UTC),
     )
-    return document_store.add(db, document)
+    return document_store.add(db, document, stored_path)
 
 
 @router.get("", response_model=list[DocumentInfo])
@@ -56,5 +59,8 @@ async def get_document(doc_id: str, db: DbSession) -> DocumentInfo:
 
 @router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(doc_id: str, db: DbSession) -> None:
+    stored_path = document_store.get_stored_path(db, doc_id)
     if not document_store.delete(db, doc_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
+    if stored_path:
+        file_store.delete_file(stored_path)

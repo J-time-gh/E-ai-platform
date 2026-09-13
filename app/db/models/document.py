@@ -16,3 +16,4 @@ class Document(Base):
     size: Mapped[int] = mapped_column(Integer)
     content_type: Mapped[str] = mapped_column(String(100))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    stored_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
