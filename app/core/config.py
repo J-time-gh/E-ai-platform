@@ -25,5 +25,10 @@ class Settings(BaseSettings):
     llm_model: str = "qwen2.5-14b-instruct"
     llm_api_key: str = "lm-studio"
 
+    embedding_device: str = "cuda"
+    embedding_batch_size: int = 32
+    hf_endpoint: str = "https://hf-mirror.com"
+    hf_home: str = "D:/Tool/Cache/huggingface"
+
 
 settings = Settings()

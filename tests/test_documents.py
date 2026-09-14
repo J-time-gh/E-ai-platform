@@ -3,8 +3,10 @@ from pathlib import Path
 
 import httpx
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.core.config import settings
+from app.db.models.chunk import EMBEDDING_DIM, Chunk
 
 
 def _upload(
@@ -81,3 +83,30 @@ def test_delete_removes_file_from_disk(client: TestClient) -> None:
     assert path.exists()
     assert client.delete(f"/documents/{doc_id}").status_code == 204
     assert not path.exists()
+
+
+def test_upload_ingests_chunks(client: TestClient, db_session) -> None:
+    content = ("这是用于测试切块的句子。" * 100).encode("utf-8")
+    doc_id = _upload(client, filename="book.txt", content=content).json()["id"]
+
+    rows = db_session.scalars(
+        select(Chunk).where(Chunk.document_id == doc_id).order_by(Chunk.chunk_index)
+    ).all()
+    assert len(rows) > 1
+    assert [r.chunk_index for r in rows] == list(range(len(rows)))
+    assert all(len(r.embedding) == EMBEDDING_DIM for r in rows)
+
+
+def test_delete_document_removes_chunks(client: TestClient, db_session) -> None:
+    doc_id = _upload(client).json()["id"]
+    assert db_session.scalars(select(Chunk).where(Chunk.document_id == doc_id)).all()
+
+    assert client.delete(f"/documents/{doc_id}").status_code == 204
+    assert not db_session.scalars(select(Chunk).where(Chunk.document_id == doc_id)).all()
+
+
+def test_upload_empty_file_returns_422_and_cleans_up(client: TestClient) -> None:
+    response = _upload(client, filename="empty.txt", content=b"   \n")
+    assert response.status_code == 422
+    assert "文本" in response.json()["detail"]
+    assert all(doc["filename"] != "empty.txt" for doc in client.get("/documents").json())

@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, status
 from app.db.session import DbSession
 from app.schemas.documents import DocumentInfo
 from app.services import document_store, file_store
+from app.services.embedding import EmbedderDep  # ← 新增
+from app.services.ingest import IngestError, ingest_document  # ← 新增
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -13,8 +15,14 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".xlsx"}
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
 
+def _cleanup_failed_upload(db: DbSession, document_id: str, stored_path: str) -> None:
+    """入库失败时清理：删记录（chunks 级联）+ 删文件。"""
+    document_store.delete(db, document_id)
+    file_store.delete_file(stored_path)
+
+
 @router.post("/upload", response_model=DocumentInfo, status_code=status.HTTP_201_CREATED)
-async def upload_document(file: UploadFile, db: DbSession) -> DocumentInfo:
+async def upload_document(file: UploadFile, db: DbSession, embedder: EmbedderDep) -> DocumentInfo:
     """上传文档（当前仅保存元数据，阶段 3 加入解析与向量化）。"""
     filename = file.filename or "unnamed"
     suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
@@ -41,7 +49,24 @@ async def upload_document(file: UploadFile, db: DbSession) -> DocumentInfo:
         content_type=file.content_type or "application/octet-stream",
         uploaded_at=datetime.now(UTC),
     )
-    return document_store.add(db, document, stored_path)
+    result = document_store.add(db, document, stored_path)
+
+    try:
+        ingest_document(db, document_id, stored_path, embedder)
+    except IngestError as exc:
+        _cleanup_failed_upload(db, document_id, stored_path)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        _cleanup_failed_upload(db, document_id, stored_path)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="文档处理失败，请稍后重试",
+        ) from exc
+
+    return result
 
 
 @router.get("", response_model=list[DocumentInfo])

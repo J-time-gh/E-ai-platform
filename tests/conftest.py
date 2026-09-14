@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.services.embedding import FakeEmbedder, get_embedder
 
 # 测试的文件落盘目录（与生产目录隔离）
 TEST_UPLOAD_DIR = Path("data/test_uploads")
@@ -47,6 +48,8 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_embedder] = lambda: FakeEmbedder()
+
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
