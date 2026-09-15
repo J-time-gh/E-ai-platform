@@ -9,7 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-import pgvector          # ← 新增这一行
+import pgvector  # 提供 chunks.embedding 用的 pgvector.sqlalchemy.vector.VECTOR 类型
 
 
 # revision identifiers, used by Alembic.
@@ -34,14 +34,15 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_chunks_document_id'), 'chunks', ['document_id'], unique=False)
-    op.create_index(                    # ← 从这里开始新增
+    # HNSW + vector_cosine_ops：加速 /search 的 Top-K 余弦近邻检索（阶段 3 M5）
+    op.create_index(
         "ix_chunks_embedding_hnsw",
         "chunks",
         ["embedding"],
         unique=False,
         postgresql_using="hnsw",
         postgresql_ops={"embedding": "vector_cosine_ops"},
-    )                                   # ← 到这里
+    )
     op.add_column('documents', sa.Column('stored_path', sa.String(length=500), nullable=True))
     # ### end Alembic commands ###
 

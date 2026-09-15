@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, status
 from app.db.session import DbSession
 from app.schemas.documents import DocumentInfo
 from app.services import document_store, file_store
-from app.services.embedding import EmbedderDep  # ← 新增
-from app.services.ingest import IngestError, ingest_document  # ← 新增
+from app.services.embedding import EmbedderDep
+from app.services.ingest import IngestError, ingest_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -23,7 +23,7 @@ def _cleanup_failed_upload(db: DbSession, document_id: str, stored_path: str) ->
 
 @router.post("/upload", response_model=DocumentInfo, status_code=status.HTTP_201_CREATED)
 async def upload_document(file: UploadFile, db: DbSession, embedder: EmbedderDep) -> DocumentInfo:
-    """上传文档（当前仅保存元数据，阶段 3 加入解析与向量化）。"""
+    """上传文档：落盘 → 写元数据 → 解析切分向量化入库（阶段 3 M1–M4）；失败回滚记录与文件。"""
     filename = file.filename or "unnamed"
     suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
     if suffix not in ALLOWED_EXTENSIONS:
