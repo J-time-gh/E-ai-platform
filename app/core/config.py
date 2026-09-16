@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     llm_model: str = "qwen2.5-14b-instruct"
     llm_api_key: str = "lm-studio"
 
+    llm_timeout: float = 120.0
+    llm_temperature: float = 0.2
+
     embedding_device: str = "cuda"
     embedding_batch_size: int = 32
     hf_endpoint: str = "https://hf-mirror.com"

@@ -1,13 +1,17 @@
 from pydantic import BaseModel, Field
 
 
+# 用户输入什么
 class SearchRequest(BaseModel):
     """检索请求。"""
 
     query: str = Field(min_length=1, max_length=2000)
+    # 返回最相关的结果数量           #至少1  #至多20
     top_k: int = Field(default=5, ge=1, le=20)
 
 
+# 单条检索结果模型
+# 系统返回什么
 class SearchResult(BaseModel):
     """单条检索结果。"""
 

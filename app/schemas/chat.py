@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.search import SearchResult
+
 
 # 一条对话消息
 class ChatMessage(BaseModel):
@@ -22,6 +24,8 @@ class ChatRequest(BaseModel):
     # default_factory=list每次都会调用list()，而不是在类定义时就创建一个空列表，
     # 这样可以避免多个实例共享同一个列表的问题。
     history: list[ChatMessage] = Field(default_factory=list)
+    top_k: int = Field(default=5, ge=1, le=20)
+    model: str | None = None  # 不传用 settings.llm_model；传了走指定模型（Gateway 雏形）
 
 
 # 接口返回的数据
@@ -29,3 +33,4 @@ class ChatResponse(BaseModel):
     # 回答内容
     reply: str
     model: str
+    sources: list[SearchResult] = Field(default_factory=list)
