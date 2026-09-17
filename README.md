@@ -62,7 +62,7 @@ tests/                   # pytest 自动化测试
 - [x] 阶段 0：项目骨架（FastAPI + /health + 测试 + CI）
 - [x] 阶段 1：基础 API（/chat、/documents）
 - [x] 阶段 2：PostgreSQL + pgvector + Redis（Docker Compose）
-- [ ] 阶段 3：Production RAG（解析 → Chunk → Embedding → 检索 → 带引用回答）
+- [X] 阶段 3：Production RAG（解析 → Chunk → Embedding → 检索 → 带引用回答）
 - [ ] 阶段 4：Hybrid Retrieval（BM25 + 向量 + RRF）+ Reranker + 评测
 - [ ] 阶段 5：Agent（LangGraph + RAG/SQL/Python 工具）
 - [ ] 阶段 6：工程化（JWT、缓存、异步任务、压测）
