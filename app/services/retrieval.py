@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.models.chunk import Chunk
 from app.db.models.document import Document
 from app.schemas.search import SearchResult
+from app.services.bm25 import get_bm25_index
 from app.services.embedding import Embedder
 
 
@@ -58,3 +59,17 @@ def search(
     """把查询向量化后检索。"""
     query_vector = embedder.embed_texts([query])[0]
     return search_chunks(db, query_vector, top_k)
+
+
+# 分发函数
+def search_with_mode(
+    db: Session,
+    embedder: Embedder,
+    query: str,
+    top_k: int,
+    mode: str = "vector",
+) -> list[SearchResult]:
+    """按 mode 选择检索器（阶段 4 后续会再加 hybrid / hybrid_rerank）。"""
+    if mode == "bm25":
+        return get_bm25_index().search(db, query, top_k)
+    return search(db, embedder, query, top_k)

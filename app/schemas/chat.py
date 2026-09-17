@@ -25,7 +25,10 @@ class ChatRequest(BaseModel):
     # 这样可以避免多个实例共享同一个列表的问题。
     history: list[ChatMessage] = Field(default_factory=list)
     top_k: int = Field(default=5, ge=1, le=20)
-    model: str | None = None  # 不传用 settings.llm_model；传了走指定模型（Gateway 雏形）
+    # 用哪个大模型：不传则用 settings.llm_model；传了走指定模型（Gateway 雏形）
+    model: str | None = None
+    # 用哪种检索器：vector = 向量语义检索，bm25 = 关键词检索
+    mode: Literal["vector", "bm25"] = "vector"
 
 
 # 接口返回的数据

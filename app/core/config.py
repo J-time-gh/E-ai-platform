@@ -33,5 +33,8 @@ class Settings(BaseSettings):
     hf_endpoint: str = "https://hf-mirror.com"
     hf_home: str = "D:/Tool/Cache/huggingface"
 
+    # 检索层门控：余弦相似度低于此值视为"没检索到相关资料"（仅 vector 模式）
+    min_vector_score: float = 0.45
+
 
 settings = Settings()

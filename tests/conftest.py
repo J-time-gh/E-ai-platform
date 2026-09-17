@@ -19,6 +19,9 @@ from app.services.llm import LLMUnavailable, get_llm_client
 # 测试的文件落盘目录（与生产目录隔离）
 TEST_UPLOAD_DIR = Path("data/test_uploads")
 settings.upload_dir = str(TEST_UPLOAD_DIR)
+# FakeEmbedder 是哈希向量、没有语义，分数只有"完全相同 ≈1.0 / 其它 ≈0.1~0.4"两种，
+# 生产用的 MIN_SCORE 阈值会误杀测试数据，所以测试里把它关掉。
+settings.min_vector_score = 0.0
 
 
 class FakeLLMClient:

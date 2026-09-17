@@ -15,4 +15,4 @@ async def search(
     embedder: EmbedderDep,
 ) -> list[SearchResult]:
     """语义检索：返回与查询最相关的知识块。"""
-    return retrieval.search(db, embedder, request.query, request.top_k)
+    return retrieval.search_with_mode(db, embedder, request.query, request.top_k, request.mode)

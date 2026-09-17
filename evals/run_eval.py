@@ -11,6 +11,7 @@
 输出：控制台打印 markdown 表格，同时写入 evals/report.md
 """
 
+import argparse
 import json
 import math
 import re
@@ -96,11 +97,11 @@ def warm_up(client: httpx.Client) -> None:
     print(f"预热完成：{time.perf_counter() - started:.1f}s\n")
 
 
-def run_one(client: httpx.Client, item: Question) -> tuple[Sample, str]:
+def run_one(client: httpx.Client, item: Question, mode: str) -> tuple[Sample, str]:
     """跑一条题：先检索（看命中排名），再问答（看引用 / 覆盖 / 延迟）。"""
     search_response = client.post(
         f"{BASE_URL}/search",
-        json={"query": item.question, "top_k": TOP_K},
+        json={"query": item.question, "top_k": TOP_K, "mode": mode},
     )
     search_response.raise_for_status()
     contents = [row["content"] for row in search_response.json()]
@@ -109,7 +110,7 @@ def run_one(client: httpx.Client, item: Question) -> tuple[Sample, str]:
     started = time.perf_counter()
     chat_response = client.post(
         f"{BASE_URL}/chat",
-        json={"message": item.question, "top_k": TOP_K},
+        json={"message": item.question, "top_k": TOP_K, "mode": mode},
     )
     latency = time.perf_counter() - started
     chat_response.raise_for_status()
@@ -128,7 +129,7 @@ def run_one(client: httpx.Client, item: Question) -> tuple[Sample, str]:
     return sample, body["model"]
 
 
-def build_report(samples: list[Sample], model: str) -> str:
+def build_report(samples: list[Sample], model: str, mode: str) -> str:
     """计算指标并生成 markdown 报告。"""
     retrieval = [s for s in samples if s.answerable]  # 检索/回答指标只看"可答"题
     refusals = [s for s in samples if not s.answerable]  # 拒答指标只看"不可答"题
@@ -147,6 +148,7 @@ def build_report(samples: list[Sample], model: str) -> str:
         "",
         f"- 评测时间：{datetime.now().astimezone():%Y-%m-%d %H:%M:%S}",
         f"- 生成模型：{model}",
+        f"- 检索模式：{mode}",
         f"- 检索 top_k：{TOP_K}",
         f"- 题库：{len(samples)} 条（可答 {total} / 不可答 {len(refusals)}）",
         "- 延迟统计已排除预热（首次模型加载）",
@@ -181,15 +183,25 @@ def build_report(samples: list[Sample], model: str) -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="RAG 评测")
+    parser.add_argument(
+        "--mode",
+        default="vector",
+        # hybrid / hybrid_rerank 要等 4.2 / 4.3 实现后才能用
+        choices=["vector", "bm25", "hybrid", "hybrid_rerank"],
+    )
+    args = parser.parse_args()
+    report_path = REPORT_PATH.with_name(f"report-{args.mode}.md")
+
     questions = load_questions()
-    print(f"载入题库 {len(questions)} 条\n")
+    print(f"载入题库 {len(questions)} 条，检索模式：{args.mode}\n")
 
     samples: list[Sample] = []
     model = "unknown"
     with httpx.Client(timeout=300.0) as client:
         warm_up(client)
         for index, item in enumerate(questions, start=1):
-            sample, served_model = run_one(client, item)
+            sample, served_model = run_one(client, item, args.mode)
             samples.append(sample)
             if model == "unknown" and served_model != "none":
                 model = served_model
@@ -199,10 +211,10 @@ def main() -> None:
                 f"命中={rank_text:<2} 延迟={sample.latency:5.2f}s"
             )
 
-    report = build_report(samples, model)
+    report = build_report(samples, model, args.mode)
     print("\n" + report)
-    REPORT_PATH.write_text(report, encoding="utf-8")
-    print(f"报告已写入：{REPORT_PATH}")
+    report_path.write_text(report, encoding="utf-8")
+    print(f"报告已写入：{report_path}")
 
 
 if __name__ == "__main__":
