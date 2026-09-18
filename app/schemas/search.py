@@ -10,7 +10,9 @@ class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     # 返回最相关的结果数量           #至少1  #至多20
     top_k: int = Field(default=5, ge=1, le=20)
-    mode: Literal["vector", "bm25"] = "vector"  # 默认向量，保证旧测试/旧调用不受影响
+    # ← 加 "hybrid"
+    # # 默认向量，保证旧测试/旧调用不受影响
+    mode: Literal["vector", "bm25", "hybrid"] = "vector"
 
 
 # 单条检索结果模型

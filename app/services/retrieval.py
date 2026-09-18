@@ -8,6 +8,9 @@ from app.db.models.document import Document
 from app.schemas.search import SearchResult
 from app.services.bm25 import get_bm25_index
 from app.services.embedding import Embedder
+from app.services.fusion import rrf_fuse
+
+RECALL_K = 20  # 融合时每路先召回多少条（比最终 top_k 大，融合才有腾挪空间）
 
 
 # 执行数据库检索
@@ -68,8 +71,24 @@ def search_with_mode(
     query: str,
     top_k: int,
     mode: str = "vector",
+    min_score: float = 0.0,
 ) -> list[SearchResult]:
-    """按 mode 选择检索器（阶段 4 后续会再加 hybrid / hybrid_rerank）。"""
+    """按 mode 选择检索器。
+
+    min_score > 0 时对**向量结果**做门控（/chat 传配置值，/search 不传）。
+    为什么门控放在这里：hybrid 融合后 score 会被替换成 RRF 分（0.016 量级），
+    没法再用相似度阈值判断，所以必须在融合**之前**过滤向量那一侧。
+    """
     if mode == "bm25":
         return get_bm25_index().search(db, query, top_k)
-    return search(db, embedder, query, top_k)
+
+    recall_k = top_k if mode == "vector" else RECALL_K
+    vector_results = search(db, embedder, query, recall_k)
+    if min_score > 0:
+        vector_results = [result for result in vector_results if result.score >= min_score]
+
+    if mode == "hybrid":
+        bm25_results = get_bm25_index().search(db, query, RECALL_K)
+        return rrf_fuse([vector_results, bm25_results], top_k)
+
+    return vector_results

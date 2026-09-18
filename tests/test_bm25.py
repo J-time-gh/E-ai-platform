@@ -61,3 +61,10 @@ def test_vector_mode_remains_default(client: TestClient) -> None:
 
 def test_search_rejects_unknown_mode(client: TestClient) -> None:
     assert client.post("/search", json={"query": "x", "mode": "bm42"}).status_code == 422
+
+
+def test_tokenize_filters_stopwords() -> None:
+    tokens = tokenize("公司的年假有多少天？")
+    assert "的" not in tokens
+    assert "有" not in tokens
+    assert "多少" not in tokens

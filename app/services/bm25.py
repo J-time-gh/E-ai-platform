@@ -21,10 +21,66 @@ from app.schemas.search import SearchResult
 
 jieba.setLogLevel(logging.WARNING)  # 关掉 "Building prefix dict" 之类的噪音日志
 
+# 中文停用词 / 疑问词：它们几乎出现在每个块里，只会制造"假命中"
+# （"公司的年假有多少天？"里的"的/有/多少/天"就是典型）
+STOPWORDS = {
+    "的",
+    "了",
+    "是",
+    "有",
+    "和",
+    "在",
+    "就",
+    "都",
+    "而",
+    "及",
+    "与",
+    "或",
+    "对",
+    "为",
+    "以",
+    "于",
+    "其",
+    "之",
+    "也",
+    "很",
+    "把",
+    "被",
+    "这",
+    "那",
+    "一个",
+    "我们",
+    "他们",
+    "什么",
+    "怎么",
+    "怎样",
+    "多少",
+    "哪些",
+    "哪个",
+    "为什么",
+    "如何",
+    "是否",
+    "可以",
+    "应该",
+    "吗",
+    "呢",
+    "吧",
+    "啊",
+    "天",
+    "用",
+    "？",
+    "，",
+    "。",
+    "、",
+    "；",
+    "：",
+    "！",
+}
+
 
 def tokenize(text: str) -> list[str]:
-    """中文分词：BM25 比的是"词"，必须先分词（按字切会失去意义）。"""
-    return [token for token in jieba.lcut(text) if token.strip()]
+    """中文分词：BM25 比的是"词"；同时滤掉停用词，避免"的/是/多少"制造假命中。"""
+    return [token for token in jieba.lcut(text) if token.strip() and token not in STOPWORDS]
 
 
 @dataclass

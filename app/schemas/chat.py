@@ -28,7 +28,8 @@ class ChatRequest(BaseModel):
     # 用哪个大模型：不传则用 settings.llm_model；传了走指定模型（Gateway 雏形）
     model: str | None = None
     # 用哪种检索器：vector = 向量语义检索，bm25 = 关键词检索
-    mode: Literal["vector", "bm25"] = "vector"
+    # 加 "hybrid"
+    mode: Literal["vector", "bm25", "hybrid"] = "vector"
 
 
 # 接口返回的数据

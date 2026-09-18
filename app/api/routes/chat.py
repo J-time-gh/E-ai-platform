@@ -9,7 +9,8 @@ from app.services import rag, retrieval
 from app.services.embedding import EmbedderDep
 from app.services.llm import LLMClientDep, LLMUnavailable
 
-MIN_VECTOR_SCORE = 0.45  # 余弦相似度低于此值视为"没检索到相关资料"（仅用于 vector 模式）
+# 余弦相似度低于此值视为"没检索到相关资料"（仅用于 vector 模式）
+# MIN_VECTOR_SCORE = 0.45
 
 router = APIRouter(tags=["chat"])
 
@@ -21,13 +22,15 @@ async def chat(
     embedder: EmbedderDep,
     llm: LLMClientDep,
 ) -> ChatResponse:
-    """知识库问答：向量检索 Top-K → 组装提示词 → 模型带引用回答。"""
-    results = retrieval.search_with_mode(db, embedder, request.message, request.top_k, request.mode)
-
-    if request.mode == "vector":
-        # 向量模式：过滤低分块。BM25 模式不用阈值——它已经在检索层用
-        # "分词交集"过滤过一次了，不相关的块根本不会返回。
-        results = [result for result in results if result.score >= settings.min_vector_score]
+    """知识库问答：检索 Top-K → 组装提示词 → 模型带引用回答。"""
+    results = retrieval.search_with_mode(
+        db,
+        embedder,
+        request.message,
+        request.top_k,
+        request.mode,
+        min_score=settings.min_vector_score,  # ← 门控交给检索层（对 hybrid 也生效）
+    )
 
     if not results:
         # 知识库没有相关资料：不调模型，直接拒答（快 + 稳定 + 不烧 token）
