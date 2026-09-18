@@ -8,7 +8,8 @@ from app.db.models.document import Document
 from app.schemas.search import SearchResult
 from app.services.bm25 import get_bm25_index
 from app.services.embedding import Embedder
-from app.services.fusion import rrf_fuse
+from app.services.fusion import merge_candidates, rrf_fuse
+from app.services.reranker import Reranker, rerank
 
 RECALL_K = 20  # 融合时每路先召回多少条（比最终 top_k 大，融合才有腾挪空间）
 
@@ -72,8 +73,15 @@ def search_with_mode(
     top_k: int,
     mode: str = "vector",
     min_score: float = 0.0,
+    reranker: Reranker | None = None,
+    min_rerank_score: float = 0.0,
 ) -> list[SearchResult]:
     """按 mode 选择检索器。
+
+    - vector：只走向量腿
+    - bm25：只走关键词腿
+    - hybrid：两路各召回 RECALL_K 条 → RRF 融合 → 取 top_k
+    - hybrid_rerank：两路各召回 RECALL_K 条 → 去重合并 → CrossEncoder 精排 → 取 top_k
 
     min_score > 0 时对**向量结果**做门控（/chat 传配置值，/search 不传）。
     为什么门控放在这里：hybrid 融合后 score 会被替换成 RRF 分（0.016 量级），
@@ -87,8 +95,18 @@ def search_with_mode(
     if min_score > 0:
         vector_results = [result for result in vector_results if result.score >= min_score]
 
+    if mode == "vector":
+        return vector_results
+
+    bm25_results = get_bm25_index().search(db, query, RECALL_K)
+
     if mode == "hybrid":
-        bm25_results = get_bm25_index().search(db, query, RECALL_K)
         return rrf_fuse([vector_results, bm25_results], top_k)
 
-    return vector_results
+    if mode == "hybrid_rerank":
+        if reranker is None:
+            raise ValueError("hybrid_rerank 模式必须注入 reranker")
+        candidates = merge_candidates([vector_results, bm25_results])
+        return rerank(query, candidates, top_k, reranker, min_rerank_score)
+
+    raise ValueError(f"未知检索模式：{mode}")

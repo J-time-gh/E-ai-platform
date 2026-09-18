@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.main import app
 from app.services.embedding import FakeEmbedder, get_embedder
 from app.services.llm import LLMUnavailable, get_llm_client
+from app.services.reranker import FakeReranker, get_reranker
 
 # 测试的文件落盘目录（与生产目录隔离）
 TEST_UPLOAD_DIR = Path("data/test_uploads")
@@ -22,6 +23,8 @@ settings.upload_dir = str(TEST_UPLOAD_DIR)
 # FakeEmbedder 是哈希向量、没有语义，分数只有"完全相同 ≈1.0 / 其它 ≈0.1~0.4"两种，
 # 生产用的 MIN_SCORE 阈值会误杀测试数据，所以测试里把它关掉。
 settings.min_vector_score = 0.0
+# 精排同理：FakeReranker 只看"字面重合"，生产阈值也会误杀测试数据。
+settings.min_rerank_score = 0.0
 
 
 class FakeLLMClient:
@@ -49,6 +52,12 @@ def fake_llm() -> FakeLLMClient:
     return FakeLLMClient()
 
 
+@pytest.fixture
+def fake_reranker() -> FakeReranker:
+    """精排测试替身：不加载 1GB 模型，测试才能跑得快。"""
+    return FakeReranker()
+
+
 @pytest.fixture(scope="session")
 def engine() -> Generator[Engine, None, None]:
     test_engine = create_engine(settings.test_database_url)
@@ -71,15 +80,19 @@ def db_session(engine: Engine) -> Generator[Session, None, None]:
     connection.close()
 
 
-# 第 71 行，client fixture 签名带上 fake_llm，并加一行 override：
 @pytest.fixture
-def client(db_session: Session, fake_llm: FakeLLMClient) -> Generator[TestClient, None, None]:
+def client(
+    db_session: Session,
+    fake_llm: FakeLLMClient,
+    fake_reranker: FakeReranker,
+) -> Generator[TestClient, None, None]:
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_embedder] = lambda: FakeEmbedder()
-    app.dependency_overrides[get_llm_client] = lambda: fake_llm  # ← 补这行
+    app.dependency_overrides[get_llm_client] = lambda: fake_llm
+    app.dependency_overrides[get_reranker] = lambda: fake_reranker
 
     with TestClient(app) as test_client:
         yield test_client

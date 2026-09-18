@@ -36,5 +36,11 @@ class Settings(BaseSettings):
     # 检索层门控：余弦相似度低于此值视为"没检索到相关资料"（仅 vector 模式）
     min_vector_score: float = 0.45
 
+    # 精排层（阶段 4.3）：CrossEncoder 对候选块重新打分
+    rerank_model: str = "BAAI/bge-reranker-base"
+    rerank_max_length: int = 512
+    # 精排分门控：0 = 关闭。先测排序质量，再用真实数据定阈值（别拍脑袋）
+    min_rerank_score: float = 0.0
+
 
 settings = Settings()

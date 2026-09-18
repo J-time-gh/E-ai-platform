@@ -28,11 +28,25 @@ def rrf_fuse(
             first_seen.setdefault(chunk_id, result)
 
     ordered = sorted(scores.items(), key=lambda pair: pair[1], reverse=True)[:top_k]
-    result = []
+    fused: list[SearchResult] = []
     for chunk_id, score in ordered:
-        result.append(first_seen[chunk_id].model_copy(update={"score": round(score, 6)}))
-    return result
-    # return [
-    #     first_seen[chunk_id].model_copy(update={"score": round(score, 6)})
-    #     for chunk_id, score in ordered
-    # ]
+        fused.append(first_seen[chunk_id].model_copy(update={"score": round(score, 6)}))
+    return fused
+
+
+def merge_candidates(result_lists: list[list[SearchResult]]) -> list[SearchResult]:
+    """把多路结果**只做去重合并**（不重新排序），交给下游精排。
+
+    与 rrf_fuse 的分工：rrf_fuse 的职责是"产出排名"，所以必须打分；
+    这里只要求"两路的候选进同一个池子、同一个块不重复"——排序交给
+    CrossEncoder，因为它比 RRF 看得准。
+    """
+    seen: set[str] = set()
+    merged: list[SearchResult] = []
+    for results in result_lists:
+        for result in results:
+            if result.chunk_id in seen:
+                continue
+            seen.add(result.chunk_id)
+            merged.append(result)
+    return merged

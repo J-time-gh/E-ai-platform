@@ -1,7 +1,7 @@
 """RRF 融合测试：纯函数，不需要数据库、不需要模型。"""
 
 from app.schemas.search import SearchResult
-from app.services.fusion import rrf_fuse
+from app.services.fusion import merge_candidates, rrf_fuse
 
 
 def _result(chunk_id: str, score: float = 1.0) -> SearchResult:
@@ -49,3 +49,22 @@ def test_rrf_replaces_score_with_fusion_score() -> None:
     fused = rrf_fuse([[_result("a", score=0.99)]], top_k=1)
     # 原来的 0.99 会被 RRF 分（1/61 ≈ 0.016）替换掉
     assert fused[0].score < 0.1
+
+
+def test_merge_candidates_deduplicates() -> None:
+    vector = [_result("a"), _result("b")]
+    bm25 = [_result("b"), _result("c")]
+    merged = merge_candidates([vector, bm25])
+    assert [item.chunk_id for item in merged] == ["a", "b", "c"]
+
+
+def test_merge_candidates_keeps_first_occurrence_order() -> None:
+    """先向量后 BM25：向量独有的在前，BM25 独有的接在后面。"""
+    vector = [_result("v1"), _result("shared")]
+    bm25 = [_result("shared"), _result("b1")]
+    merged = merge_candidates([vector, bm25])
+    assert [item.chunk_id for item in merged] == ["v1", "shared", "b1"]
+
+
+def test_merge_candidates_handles_empty_input() -> None:
+    assert merge_candidates([[], []]) == []

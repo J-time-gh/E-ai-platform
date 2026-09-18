@@ -29,7 +29,7 @@ class ChatRequest(BaseModel):
     model: str | None = None
     # 用哪种检索器：vector = 向量语义检索，bm25 = 关键词检索
     # 加 "hybrid"
-    mode: Literal["vector", "bm25", "hybrid"] = "vector"
+    mode: Literal["vector", "bm25", "hybrid", "hybrid_rerank"] = "vector"
 
 
 # 接口返回的数据

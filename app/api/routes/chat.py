@@ -8,6 +8,7 @@ from app.schemas.chat import ChatRequest, ChatResponse
 from app.services import rag, retrieval
 from app.services.embedding import EmbedderDep
 from app.services.llm import LLMClientDep, LLMUnavailable
+from app.services.reranker import RerankerDep
 
 # 余弦相似度低于此值视为"没检索到相关资料"（仅用于 vector 模式）
 # MIN_VECTOR_SCORE = 0.45
@@ -18,9 +19,11 @@ router = APIRouter(tags=["chat"])
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
+    *,
     db: DbSession,
     embedder: EmbedderDep,
     llm: LLMClientDep,
+    reranker: RerankerDep,
 ) -> ChatResponse:
     """知识库问答：检索 Top-K → 组装提示词 → 模型带引用回答。"""
     results = retrieval.search_with_mode(
@@ -29,7 +32,9 @@ async def chat(
         request.message,
         request.top_k,
         request.mode,
-        min_score=settings.min_vector_score,  # ← 门控交给检索层（对 hybrid 也生效）
+        min_score=settings.min_vector_score,  # 向量腿门控（对 hybrid 也生效）
+        reranker=reranker,
+        min_rerank_score=settings.min_rerank_score,  # 精排门控（所有模式统一）
     )
 
     if not results:
