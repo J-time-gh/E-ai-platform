@@ -37,12 +37,19 @@ class FakeLLMClient:
         self.last_messages: list[dict[str, str]] = []
         self.models: list[str | None] = []
 
-    async def chat(self, messages: list[dict[str, str]], model: str | None = None) -> str:
+    async def chat(
+        self,
+        messages: list[dict[str, str]],
+        model: str | None = None,
+        response_format: dict[str, str] | None = None,
+    ) -> str:
         self.call_count += 1
         self.last_messages = messages
         self.models.append(model)
+
         if self.fail:
             raise LLMUnavailable("模拟模型服务不可用")
+
         return self.reply
 
 

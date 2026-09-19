@@ -42,5 +42,22 @@ class Settings(BaseSettings):
     # 精排分门控：0 = 关闭。先测排序质量，再用真实数据定阈值（别拍脑袋）
     min_rerank_score: float = 0.0
 
+    # Agent
+    agent_max_steps: int = 4
+    # SQL 工具
+    sql_max_rows: int = 100
+    sql_timeout_ms: int = 3000
+    # Python 计算工具
+    # 限制用户传入的表达式长度 (在Sandbox中也需要调用这个)
+    python_max_expression_length: int = 1000
+
+    # Python Sandbox
+    # AST 是表达式解析后的语法树。
+    python_max_ast_nodes: int = 100
+    # 限制乘方 限制表达式中数字的最大指数和绝对值，防止模型请求过大数值计算。
+    python_max_exponent: int = 20
+    # 限制最终结果的绝对值
+    python_max_abs_value: float = 1e100
+
 
 settings = Settings()
