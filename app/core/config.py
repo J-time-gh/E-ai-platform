@@ -1,3 +1,4 @@
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,6 +59,11 @@ class Settings(BaseSettings):
     python_max_exponent: int = 20
     # 限制最终结果的绝对值
     python_max_abs_value: float = 1e100
+
+    # JWT 配置
+    jwt_secret_key: SecretStr
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 30
 
 
 settings = Settings()
