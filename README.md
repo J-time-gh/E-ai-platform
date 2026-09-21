@@ -1,8 +1,8 @@
 # Enterprise AI Platform
 
-> 企业级大模型 AI 应用平台：RAG 知识库问答 · Agent 工具调用 · LLM Gateway 多模型接入
+> 企业级 AI 应用后端：RAG 知识库问答 · Agent 工具调用
 >
-> An enterprise-grade LLM application platform featuring RAG, Agents and an LLM gateway.
+> A backend-first enterprise AI platform featuring RAG and tool-using Agents.
 
 [![CI](https://github.com/J-time-gh/E-ai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/J-time-gh/E-ai-platform/actions/workflows/ci.yml)
 
@@ -10,10 +10,12 @@
 
 面向企业内部的 AI Copilot 系统：
 
-- 上传 PDF / Word / Excel 等资料建立知识库，基于 RAG 进行带引用的问答
-- Agent 自动调用 RAG / SQL / Python 等工具完成复杂任务
-- LLM Gateway 统一接入 Qwen / DeepSeek 等模型（本地 LM Studio / vLLM / 云端 API）
-- 工程化：Docker Compose、pytest、CI、监控与评测
+- 上传 PDF / Word / Excel / Markdown / TXT 等资料建立知识库，基于 RAG 进行带引用的问答
+- Agent 根据问题调用 RAG、受限只读 SQL 或安全数学表达式计算工具
+- 模型服务兼容 LM Studio / vLLM 提供的 OpenAI 兼容接口
+- 工程化基础：Docker Compose、pytest、Ruff、GitHub Actions 和检索/Agent 评测
+
+> 当前没有正式前端、JWT 认证、用户隔离、会话持久化、真实 Redis 缓存、异步入库、结构化日志、压测、监控或 LLM Gateway。
 
 ## 技术栈
 
@@ -22,12 +24,12 @@
 | Web 框架 | FastAPI + Uvicorn |
 | 配置管理 | pydantic-settings |
 | 数据库 | PostgreSQL + pgvector（阶段 2） |
-| 缓存 | Redis（阶段 2） |
+| 缓存 | Redis 依赖与配置（尚未接入实际缓存） |
 | 检索 | 向量检索 + BM25 + RRF 融合 + CrossEncoder 精排（阶段 4） |
 | 模型服务 | LM Studio / vLLM（OpenAI 兼容接口） |
-| Agent | LangGraph（阶段 5） |
-| 前端 | Streamlit（阶段 3） |
-| 工程化 | Docker、pytest、ruff、GitHub Actions |
+| Agent | LangGraph；RAG、受限 SQL 与安全数学表达式工具（阶段 5） |
+| 前端 | 暂无正式前端 |
+| 工程化 | Docker Compose、pytest、Ruff、GitHub Actions |
 
 ## 快速开始
 
@@ -52,12 +54,12 @@ uvicorn app.main:app --reload
 app/
 ├── main.py              # FastAPI 应用入口
 ├── core/                # 核心配置（settings）
-├── api/routes/          # 协议层：health / chat / documents / search
+├── api/routes/          # 协议层：health / chat / documents / search / agent
 ├── schemas/             # 契约层：Pydantic 请求与响应模型
-├── services/            # 业务层：检索 / 融合 / 精排 / 入库 / RAG 组装
+├── services/            # 业务层：检索 / 融合 / 精排 / 入库 / RAG / Agent
 └── db/                  # 数据层：SQLAlchemy 模型、会话与事务
-tests/                   # pytest 自动化测试（72 个）
-evals/                   # RAG 检索评测：题库、评测脚本、四种模式对比报告
+tests/                   # pytest 自动化测试（以实际测试输出为准）
+evals/                   # RAG 与 Agent 评测题库、脚本及结果（结果可能含敏感内容）
 .github/workflows/       # GitHub Actions CI
 ```
 
@@ -98,6 +100,34 @@ hybrid_rerank 为串行测量，延迟不可直接跨行比较。
 四种模式分别产出 `evals/report-{mode}.md`（`vector` / `bm25` / `hybrid` / `hybrid_rerank`）。
 **评测必须串行执行**——多个评测进程共用同一个 LLM 服务会让延迟指标失真。
 
+### Agent 工具调用（阶段 5）
+
+`POST /agent` 使用 LangGraph 驱动规划与工具执行循环；默认最多调用 4 次工具。模型仅决定调用哪个已注册工具、传递什么参数或直接回答，流程节点跳转由 LangGraph 控制。
+
+可用工具及边界：
+
+- `rag_search`：检索企业知识库，涉及企业资料、制度、流程、产品文档或上传文件时必须先调用。无结果时必须说明资料不足，不得编造事实。
+- `sql_query`：仅支持 `document_count` 和 `chunks_for_document` 两个只读模板，使用参数绑定、结果上限和超时控制；不是任意 SQL 执行器。
+- `python_sandbox`：仅计算经过 AST 白名单校验的数学表达式，例如 `sqrt(16)` 或 `pi * 2`；不支持导入、文件、网络、系统命令、`eval`、`exec` 或任意 Python。
+
+Agent 应直接拒绝文件读取、网络请求、系统命令和其他危险操作；闲聊、常识问题及已有工具结果的总结不应调用工具。
+
+#### 当前评测状态
+
+最近一次运行时题库共 20 题，结果为 **19/20（95%）**。唯一未通过的是 `multi-step-rag-then-python`：当时知识库中没有「单日交通报销上限」资料，`rag_search` 正确返回空结果，Agent 因而安全停止、没有继续编造金额或计算。
+
+**方案 A：暂不补充固定多步评测语料。** 因此该项不阻塞当前 Agent 核心能力，但多步端到端能力仍**未验收**，不得将 19/20 表述为多步能力已达标。接手后须重新运行以下检查，并以实际输出更新结论：
+
+```powershell
+.venv\Scripts\python.exe -m pytest -q tests\test_agent.py tests\test_agent_api.py --tb=line
+.venv\Scripts\python.exe -m ruff format --check app tests scripts
+.venv\Scripts\python.exe -m ruff check app tests scripts --no-cache
+.venv\Scripts\python.exe -m pytest -q --tb=line
+
+# 需要 PostgreSQL、后端与 LM Studio 正常运行
+.venv\Scripts\python.exe scripts\evaluate_agent.py
+```
+
 ## 开发路线图
 
 - [x] 阶段 0：项目骨架（FastAPI + /health + 测试 + CI）
@@ -105,8 +135,8 @@ hybrid_rerank 为串行测量，延迟不可直接跨行比较。
 - [x] 阶段 2：PostgreSQL + pgvector + Redis（Docker Compose）
 - [x] 阶段 3：Production RAG（解析 → Chunk → Embedding → 检索 → 带引用回答）
 - [x] 阶段 4：Hybrid Retrieval（BM25 + RRF + CrossEncoder 精排）+ 检索评测
-- [ ] 阶段 5：Agent（LangGraph + RAG/SQL/Python 工具）
-- [ ] 阶段 6：工程化（JWT、缓存、异步任务、压测）
+- [x] 阶段 5：Agent 核心能力（LangGraph + RAG / 受限 SQL / 安全数学表达式工具；多步端到端验收暂缓）
+- [ ] 阶段 6：安全与工程化（JWT、用户隔离、缓存、异步任务、压测）
 - [ ] 阶段 7：vLLM 本地推理与性能测试
 - [ ] 阶段 8：LLM Gateway（多模型路由/重试/限流/成本统计）
 - [ ] 阶段 9：Evaluation & Monitoring（Langfuse/Prometheus + Grafana）

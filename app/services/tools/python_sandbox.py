@@ -80,10 +80,10 @@ class PythonSandboxTool:
             # ast.parse() 不会直接执行表达式，而是先把表达式解析成语法树。
             # Expression
             # └── BinOp /
-                # ├── BinOp +
-                # │   ├── Constant 12
-                # │   └── Constant 8
-                # └── Constant 2
+            # ├── BinOp +
+            # │   ├── Constant 12
+            # │   └── Constant 8
+            # └── Constant 2
             tree = ast.parse(expression, mode="eval")
         except SyntaxError as exc:
             raise ToolError(
@@ -110,7 +110,8 @@ class PythonSandboxTool:
             "expression": expression,
             "value": value,
         }
-                                            # or
+        # or
+
     def _evaluate(self, node: ast.AST) -> int | float:
         """递归计算经过白名单验证的 AST 节点。"""
         # 处理数字常量
@@ -184,6 +185,7 @@ class PythonSandboxTool:
         raise ToolError(
             f"不允许的语法节点：{type(node).__name__}",
         )
+
     # 负责检查计算结果
     @staticmethod
     def _check_number(value: Any) -> int | float:

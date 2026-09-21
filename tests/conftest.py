@@ -28,10 +28,14 @@ settings.min_rerank_score = 0.0
 
 
 class FakeLLMClient:
-    """LLM 测试替身：不联网，记录收到的 messages，返回固定回答。"""
-
-    def __init__(self, reply: str = "这是模拟回答，依据资料 [1]。", fail: bool = False) -> None:
+    def __init__(
+        self,
+        reply: str = "这是模拟回答，依据资料 [1]。",
+        replies: list[str] | None = None,
+        fail: bool = False,
+    ) -> None:
         self.reply = reply
+        self.replies = list(replies or [])
         self.fail = fail
         self.call_count = 0
         self.last_messages: list[dict[str, str]] = []
@@ -41,7 +45,7 @@ class FakeLLMClient:
         self,
         messages: list[dict[str, str]],
         model: str | None = None,
-        response_format: dict[str, str] | None = None,
+        response_format: dict[str, object] | None = None,
     ) -> str:
         self.call_count += 1
         self.last_messages = messages
@@ -49,6 +53,9 @@ class FakeLLMClient:
 
         if self.fail:
             raise LLMUnavailable("模拟模型服务不可用")
+
+        if self.replies:
+            return self.replies.pop(0)
 
         return self.reply
 
