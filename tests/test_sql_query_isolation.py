@@ -56,12 +56,68 @@ def _upload(
     return response.json()["id"]
 
 
+def test_agent_sql_query_can_read_own_chunks(
+    client: TestClient,
+    fake_llm,
+) -> None:
+    """用户 A 的 Agent 可以读取用户 A 自己文档的 Chunk。"""
+    user_a_headers = _auth_headers(
+        client,
+        "sql-own-user@example.com",
+    )
+
+    private_text = "用户A自己的SQL资料"
+    document_id = _upload(
+        client,
+        user_a_headers,
+        "own-document.txt",
+        private_text,
+    )
+
+    fake_llm.replies = [
+        (
+            '{"action":"tool","tool_name":"sql_query",'
+            '"arguments":{'
+            '"query_name":"chunks_for_document",'
+            f'"document_id":"{document_id}",'
+            '"limit":20'
+            '},"answer":""}'
+        ),
+        ('{"action":"final","tool_name":"","arguments":{},"answer":"已读取自己的文档"}'),
+    ]
+
+    response = client.post(
+        "/agent",
+        headers=user_a_headers,
+        json={
+            "message": "读取我的文档文本块",
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    tool_call = body["tool_calls"][0]
+    output = tool_call["output"]
+
+    assert tool_call["tool_name"] == "sql_query"
+    assert tool_call["ok"] is True
+    assert output["count"] > 0
+    assert any(private_text in row["content"] for row in output["rows"])
+
+
 def test_agent_sql_query_cannot_read_another_users_chunks(
     client: TestClient,
     fake_llm,
 ) -> None:
-    user_a_headers = _auth_headers(client, "sql-user-a@example.com")
-    user_b_headers = _auth_headers(client, "sql-user-b@example.com")
+    """用户 B 的 Agent 不能读取用户 A 文档的 Chunk。"""
+    user_a_headers = _auth_headers(
+        client,
+        "sql-user-a@example.com",
+    )
+    user_b_headers = _auth_headers(
+        client,
+        "sql-user-b@example.com",
+    )
 
     document_id = _upload(
         client,
@@ -89,13 +145,13 @@ def test_agent_sql_query_cannot_read_another_users_chunks(
             "message": "读取这份文档的文本块",
         },
     )
-
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
 
     body = response.json()
-    output = body["tool_calls"][0]["output"]
+    tool_call = body["tool_calls"][0]
+    output = tool_call["output"]
 
-    assert body["tool_calls"][0]["tool_name"] == "sql_query"
-    assert body["tool_calls"][0]["ok"] is True
+    assert tool_call["tool_name"] == "sql_query"
+    assert tool_call["ok"] is True
     assert output["rows"] == []
     assert output["count"] == 0
