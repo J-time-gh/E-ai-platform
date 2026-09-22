@@ -14,6 +14,7 @@ class Chunk(Base):
 
     __tablename__ = "chunks"
     # HNSW 索引
+    # 加速向量相似度查询
     __table_args__ = (
         Index(
             "ix_chunks_embedding_hnsw",

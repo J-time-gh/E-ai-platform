@@ -1,4 +1,7 @@
-"""认证接口的请求与响应模型。"""
+"""认证接口的请求与响应模型。
+
+是 Pydantic Schema，即 API 的输入和输出合同
+它定义客户端能提交什么、后端会返回什么"""
 
 from typing import Literal
 
