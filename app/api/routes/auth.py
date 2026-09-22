@@ -88,6 +88,8 @@ async def login(
     )
 
 
+# response_model=CurrentUserResponse 是一层额外保护
+# 即使未来 User ORM 对象新增敏感字段，接口也只会序列化 id 和 email。
 @router.get("/me", response_model=CurrentUserResponse)
 async def get_me(
     current_user: CurrentUserDep,
