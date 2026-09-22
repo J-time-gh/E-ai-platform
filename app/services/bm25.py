@@ -98,22 +98,39 @@ class IndexedChunk:
 class Bm25Index:
     """进程内的 BM25 索引；数据库内容变化时自动重建。"""
 
-    def __init__(self) -> None:
+    def __init__(self, user_id: str) -> None:
+        self._user_id = user_id
         self._version: tuple[int, datetime | None] | None = None
         self._rows: list[IndexedChunk] = []
         self._bm25: BM25Okapi | None = None
 
-    def _read_version(self, db: Session) -> tuple[int, datetime | None]:
-        """用 (块数量, 最新创建时间) 判断索引是否过期。"""
-        total, latest = db.execute(select(func.count(Chunk.id), func.max(Chunk.created_at))).one()
+    def _read_version(
+        self,
+        db: Session,
+    ) -> tuple[int, datetime | None]:
+        """读取指定用户的索引版本信息。"""
+        total, latest = db.execute(
+            select(
+                func.count(Chunk.id),
+                func.max(Chunk.created_at),
+            )
+            .join(Document, Chunk.document_id == Document.id)
+            .where(Document.user_id == self._user_id),
+        ).one()
+
         return int(total), latest
 
     def _rebuild(self, db: Session) -> None:
+        """只重建当前用户的 BM25 索引。"""
         rows = db.execute(
-            select(Chunk, Document.filename).join(Document, Chunk.document_id == Document.id)
+            select(Chunk, Document.filename)
+            .join(Document, Chunk.document_id == Document.id)
+            .where(Document.user_id == self._user_id),
         ).all()
+
         self._rows = []
         corpus: list[list[str]] = []
+
         for chunk, filename in rows:
             tokens = tokenize(chunk.content)
             corpus.append(tokens)
@@ -125,8 +142,9 @@ class Bm25Index:
                     chunk_index=chunk.chunk_index,
                     content=chunk.content,
                     tokens=set(tokens),
-                )
+                ),
             )
+
         self._bm25 = BM25Okapi(corpus) if corpus else None
         self._version = self._read_version(db)
 
@@ -164,7 +182,7 @@ class Bm25Index:
         ]
 
 
-@lru_cache(maxsize=1)
-def get_bm25_index() -> Bm25Index:
+@lru_cache(maxsize=128)
+def get_bm25_index(user_id: str) -> Bm25Index:
     """进程内单例：只保留一份索引。"""
-    return Bm25Index()
+    return Bm25Index(user_id)

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 
+from app.api.dependencies.auth import CurrentUserDep
 from app.core.config import settings
 from app.db.session import DbSession
 from app.schemas.chat import ChatRequest, ChatResponse
@@ -24,6 +25,7 @@ async def chat(
     embedder: EmbedderDep,
     llm: LLMClientDep,
     reranker: RerankerDep,
+    current_user: CurrentUserDep,
 ) -> ChatResponse:
     """知识库问答：检索 Top-K → 组装提示词 → 模型带引用回答。"""
     results = retrieval.search_with_mode(
@@ -32,6 +34,7 @@ async def chat(
         request.message,
         request.top_k,
         request.mode,
+        user_id=current_user.id,
         min_score=settings.min_vector_score,  # 向量腿门控（对 hybrid 也生效）
         reranker=reranker,
         min_rerank_score=settings.min_rerank_score,  # 精排门控（所有模式统一）

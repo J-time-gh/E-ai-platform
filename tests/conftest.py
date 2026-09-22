@@ -118,3 +118,30 @@ def _clean_test_uploads() -> Generator[None, None, None]:
     shutil.rmtree(TEST_UPLOAD_DIR, ignore_errors=True)
     yield
     shutil.rmtree(TEST_UPLOAD_DIR, ignore_errors=True)
+
+
+@pytest.fixture
+def authenticated_headers(client: TestClient) -> dict[str, str]:
+    password = "correct-horse-battery-staple"
+
+    register_response = client.post(
+        "/auth/register",
+        json={
+            "email": "retrieval-user@example.com",
+            "password": password,
+        },
+    )
+    assert register_response.status_code == 201
+
+    login_response = client.post(
+        "/auth/login",
+        json={
+            "email": "retrieval-user@example.com",
+            "password": password,
+        },
+    )
+    assert login_response.status_code == 200
+
+    return {
+        "Authorization": f"Bearer {login_response.json()['access_token']}",
+    }

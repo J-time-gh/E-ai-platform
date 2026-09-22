@@ -16,9 +16,7 @@ RECALL_K = 20  # 融合时每路先召回多少条（比最终 top_k 大，融�
 
 # 执行数据库检索
 def search_chunks(
-    db: Session,
-    query_vector: list[float],
-    top_k: int,
+    db: Session, query_vector: list[float], top_k: int, *, user_id: str
 ) -> list[SearchResult]:
     """按余弦距离升序返回最相似的 top_k 个块（含来源文件名和相似度）。"""
     # pgvector 提供的操作，对应 SQL 中的 <=> 运算符。
@@ -28,6 +26,8 @@ def search_chunks(
         select(Chunk, Document.filename, distance)
         # 把 chunks 表和 documents 表连接起来，连接条件是 chunk.document_id = document.id。
         .join(Document, Chunk.document_id == Document.id)
+        # 只取属于当前用户的文档
+        .where(Document.user_id == user_id)
         # 余弦距离升序排列，距离最小的（最相似的）排在最前面。
         .order_by(distance)
         # 只取前 top_k 条
@@ -59,10 +59,11 @@ def search(
     embedder: Embedder,
     query: str,
     top_k: int,
+    user_id: str,
 ) -> list[SearchResult]:
     """把查询向量化后检索。"""
     query_vector = embedder.embed_texts([query])[0]
-    return search_chunks(db, query_vector, top_k)
+    return search_chunks(db, query_vector, top_k, user_id=user_id)
 
 
 # 分发函数
@@ -72,6 +73,10 @@ def search_with_mode(
     query: str,
     top_k: int,
     mode: str = "vector",
+    # user_id 放在 * 后面，意味着调用时必须明确写：user_id=current_user.id
+    *,
+    # 用户 ID
+    user_id: str,
     min_score: float = 0.0,
     reranker: Reranker | None = None,
     min_rerank_score: float = 0.0,
@@ -88,17 +93,17 @@ def search_with_mode(
     没法再用相似度阈值判断，所以必须在融合**之前**过滤向量那一侧。
     """
     if mode == "bm25":
-        return get_bm25_index().search(db, query, top_k)
+        return get_bm25_index(user_id).search(db, query, top_k)
 
     recall_k = top_k if mode == "vector" else RECALL_K
-    vector_results = search(db, embedder, query, recall_k)
+    vector_results = search(db, embedder, query, recall_k, user_id)
     if min_score > 0:
         vector_results = [result for result in vector_results if result.score >= min_score]
 
     if mode == "vector":
         return vector_results
 
-    bm25_results = get_bm25_index().search(db, query, RECALL_K)
+    bm25_results = get_bm25_index(user_id).search(db, query, RECALL_K)
 
     if mode == "hybrid":
         return rrf_fuse([vector_results, bm25_results], top_k)

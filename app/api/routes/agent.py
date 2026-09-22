@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
+from app.api.dependencies.auth import CurrentUserDep
 from app.core.config import settings
 from app.db.session import DbSession
 from app.schemas.agent import AgentRequest, AgentResponse
@@ -23,6 +24,7 @@ async def agent(
     embedder: EmbedderDep,
     reranker: RerankerDep,
     llm: LLMClientDep,
+    current_user: CurrentUserDep,
 ) -> AgentResponse:
     registry = ToolRegistry()
 
@@ -31,6 +33,7 @@ async def agent(
             db=db,
             embedder=embedder,
             reranker=reranker,
+            user_id=current_user.id,
         ),
     )
     registry.register(SqlQueryTool(db=db))

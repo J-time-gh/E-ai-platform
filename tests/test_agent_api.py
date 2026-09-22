@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 def test_agent_calls_python_then_returns_final(
     client: TestClient,
     fake_llm,
+    authenticated_headers: dict[str, str],
 ) -> None:
     fake_llm.replies = [
         (
@@ -15,6 +16,7 @@ def test_agent_calls_python_then_returns_final(
 
     response = client.post(
         "/agent",
+        headers=authenticated_headers,
         json={"message": "请计算 (12 + 8) / 2"},
     )
 
@@ -31,14 +33,28 @@ def test_agent_calls_python_then_returns_final(
     assert body["tool_calls"][0]["output"]["value"] == 10.0
 
 
-def test_agent_rejects_empty_message(client: TestClient) -> None:
-    response = client.post("/agent", json={"message": ""})
+def test_agent_rejects_empty_message(
+    client: TestClient,
+    authenticated_headers: dict[str, str],
+) -> None:
+    response = client.post(
+        "/agent",
+        headers=authenticated_headers,
+        json={"message": ""},
+    )
 
     assert response.status_code == 422
 
 
-def test_agent_rejects_too_long_message(client: TestClient) -> None:
-    response = client.post("/agent", json={"message": "a" * 2001})
+def test_agent_rejects_too_long_message(
+    client: TestClient,
+    authenticated_headers: dict[str, str],
+) -> None:
+    response = client.post(
+        "/agent",
+        headers=authenticated_headers,
+        json={"message": "a" * 2001},
+    )
 
     assert response.status_code == 422
 
@@ -46,10 +62,13 @@ def test_agent_rejects_too_long_message(client: TestClient) -> None:
 def test_agent_returns_503_when_llm_unavailable(
     client: TestClient,
     fake_llm,
+    authenticated_headers: dict[str, str],
 ) -> None:
     fake_llm.fail = True
 
-    response = client.post("/agent", json={"message": "测试模型不可用"})
+    response = client.post(
+        "/agent", headers=authenticated_headers, json={"message": "测试模型不可用"}
+    )
 
     assert response.status_code == 503
     assert "模拟模型服务不可用" in response.json()["detail"]
@@ -58,11 +77,13 @@ def test_agent_returns_503_when_llm_unavailable(
 def test_agent_returns_502_for_invalid_llm_json(
     client: TestClient,
     fake_llm,
+    authenticated_headers: dict[str, str],
 ) -> None:
     fake_llm.reply = "这不是合法 JSON"
 
     response = client.post(
         "/agent",
+        headers=authenticated_headers,
         json={"message": "测试模型协议错误"},
     )
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.dependencies.auth import CurrentUserDep
 from app.db.session import DbSession
 from app.schemas.search import SearchRequest, SearchResult
 from app.services import retrieval
@@ -15,17 +16,15 @@ async def search(
     db: DbSession,
     embedder: EmbedderDep,
     reranker: RerankerDep,
+    current_user: CurrentUserDep,
 ) -> list[SearchResult]:
-    """语义检索：返回与查询最相关的知识块。
-
-    刻意**不传** min_score / min_rerank_score：/search 是"纯检索"接口，
-    不门控，方便评测脚本量出真实的检索质量。
-    """
+    """只检索当前登录用户的知识库。"""
     return retrieval.search_with_mode(
         db,
         embedder,
         request.query,
         request.top_k,
         request.mode,
+        user_id=current_user.id,
         reranker=reranker,
     )

@@ -43,10 +43,12 @@ class RagSearchTool:
         db: Session,
         embedder: Embedder,
         reranker: Reranker,
+        user_id: str,
     ) -> None:
         self._db = db
         self._embedder = embedder
         self._reranker = reranker
+        self._user_id = user_id
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -60,6 +62,7 @@ class RagSearchTool:
             query=args.query,
             top_k=args.top_k,
             mode="hybrid_rerank",
+            user_id=self._user_id,
             min_score=settings.min_vector_score,
             reranker=self._reranker,
             min_rerank_score=settings.min_rerank_score,
