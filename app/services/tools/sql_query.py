@@ -50,8 +50,14 @@ class SqlQueryTool:
         "additionalProperties": False,
     }
 
-    def __init__(self, db: Session) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        user_id: str,
+    ) -> None:
         self._db = db
+        self._user_id = user_id
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -67,9 +73,12 @@ class SqlQueryTool:
                 """
                 SELECT count(*) AS count
                 FROM documents
+                WHERE user_id = :user_id
                 """,
             )
-            params: dict[str, Any] = {}
+            params: dict[str, Any] = {
+                "user_id": self._user_id,
+            }
 
         elif args.query_name == "chunks_for_document":
             if not args.document_id:
@@ -80,18 +89,22 @@ class SqlQueryTool:
             statement = text(
                 """
                 SELECT
-                    id,
-                    document_id,
-                    chunk_index,
-                    content
+                    chunks.id,
+                    chunks.document_id,
+                    chunks.chunk_index,
+                    chunks.content
                 FROM chunks
-                WHERE document_id = :document_id
-                ORDER BY chunk_index
+                JOIN documents
+                    ON chunks.document_id = documents.id
+                WHERE chunks.document_id = :document_id
+                  AND documents.user_id = :user_id
+                ORDER BY chunks.chunk_index
                 LIMIT :limit
                 """,
             )
             params = {
                 "document_id": args.document_id,
+                "user_id": self._user_id,
                 "limit": limit,
             }
 

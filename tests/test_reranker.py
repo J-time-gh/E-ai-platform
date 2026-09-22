@@ -82,17 +82,33 @@ def test_fake_reranker_is_deterministic() -> None:
     assert first[0] > first[1]
 
 
-def test_hybrid_rerank_mode_is_accepted(client: TestClient, fake_reranker: FakeReranker) -> None:
-    """API 层接受 hybrid_rerank（Literal 没漏改），并且真的调用了精排。"""
+def test_hybrid_rerank_mode_is_accepted(
+    client: TestClient,
+    fake_reranker: FakeReranker,
+    authenticated_headers: dict[str, str],
+) -> None:
+    """API 层接受 hybrid_rerank，并且真的调用精排。"""
     response = client.post(
         "/documents/upload",
-        files={"file": ("rerank.txt", io.BytesIO("苹果香蕉橘子".encode()), "text/plain")},
+        headers=authenticated_headers,
+        files={
+            "file": (
+                "rerank.txt",
+                io.BytesIO("苹果香蕉橘子".encode()),
+                "text/plain",
+            ),
+        },
     )
     assert response.status_code == 201
 
     search = client.post(
         "/search",
-        json={"query": "苹果", "top_k": 5, "mode": "hybrid_rerank"},
+        headers=authenticated_headers,
+        json={
+            "query": "苹果",
+            "top_k": 5,
+            "mode": "hybrid_rerank",
+        },
     )
     assert search.status_code == 200
     assert fake_reranker.call_count == 1

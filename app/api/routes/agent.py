@@ -36,7 +36,12 @@ async def agent(
             user_id=current_user.id,
         ),
     )
-    registry.register(SqlQueryTool(db=db))
+    registry.register(
+        SqlQueryTool(
+            db=db,
+            user_id=current_user.id,
+        ),
+    )
     registry.register(PythonSandboxTool())
 
     service = AgentService(
