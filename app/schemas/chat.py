@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.search import SearchResult
 
@@ -30,6 +30,16 @@ class ChatRequest(BaseModel):
     # 用哪种检索器：vector = 向量语义检索，bm25 = 关键词检索
     # 加 "hybrid"
     mode: Literal["vector", "bm25", "hybrid", "hybrid_rerank"] = "vector"
+    session_id: str | None = None
+
+    @model_validator(mode="after")
+    def reject_history_with_session_id(self) -> "ChatRequest":
+        if self.session_id and self.history:
+            raise ValueError(
+                "使用 session_id 时不能同时传 history",
+            )
+
+        return self
 
 
 # 接口返回的数据

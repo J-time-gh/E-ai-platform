@@ -5,8 +5,8 @@ from fastapi import APIRouter, HTTPException, status
 from app.api.dependencies.auth import CurrentUserDep
 from app.core.config import settings
 from app.db.session import DbSession
-from app.schemas.chat import ChatRequest, ChatResponse
-from app.services import rag, retrieval
+from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse
+from app.services import chat_session_store, rag, retrieval
 from app.services.embedding import EmbedderDep
 from app.services.llm import LLMClientDep, LLMUnavailable
 from app.services.reranker import RerankerDep
@@ -27,6 +27,29 @@ async def chat(
     reranker: RerankerDep,
     current_user: CurrentUserDep,
 ) -> ChatResponse:
+    history = request.history
+
+    if request.session_id:
+        persisted_messages = chat_session_store.list_messages(
+            db,
+            request.session_id,
+            current_user.id,
+        )
+
+        if persisted_messages is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在",
+            )
+
+        history = [
+            ChatMessage(
+                role=message.role,
+                content=message.content,
+            )
+            for message in persisted_messages
+        ]
+
     """知识库问答：检索 Top-K → 组装提示词 → 模型带引用回答。"""
     results = retrieval.search_with_mode(
         db,
@@ -41,12 +64,26 @@ async def chat(
     )
 
     if not results:
-        # 知识库没有相关资料：不调模型，直接拒答（快 + 稳定 + 不烧 token）
-        return ChatResponse(reply=rag.NO_CONTEXT_REPLY, model="none", sources=[])
+        response = ChatResponse(
+            reply=rag.NO_CONTEXT_REPLY,
+            model="none",
+            sources=[],
+        )
+
+        if request.session_id:
+            chat_session_store.add_turn(
+                db,
+                session_id=request.session_id,
+                user_id=current_user.id,
+                user_content=request.message,
+                assistant_content=response.reply,
+            )
+
+        return response
 
     messages = rag.build_messages(request.message, results)
-    if request.history:
-        messages[1:1] = [message.model_dump() for message in request.history]
+    if history:
+        messages[1:1] = [message.model_dump() for message in history]
 
     try:
         reply = await llm.chat(messages, model=request.model)
@@ -56,8 +93,19 @@ async def chat(
             detail=str(exc),
         ) from exc
 
-    return ChatResponse(
+    response = ChatResponse(
         reply=reply,
         model=request.model or settings.llm_model,
         sources=results,
     )
+
+    if request.session_id:
+        chat_session_store.add_turn(
+            db,
+            session_id=request.session_id,
+            user_id=current_user.id,
+            user_content=request.message,
+            assistant_content=response.reply,
+        )
+
+    return response
