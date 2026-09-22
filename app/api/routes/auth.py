@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
+from app.api.dependencies.auth import CurrentUserDep
 from app.core.security import (
     create_access_token,
     hash_password,
@@ -84,4 +85,15 @@ async def login(
 
     return TokenResponse(
         access_token=create_access_token(user.id),
+    )
+
+
+@router.get("/me", response_model=CurrentUserResponse)
+async def get_me(
+    current_user: CurrentUserDep,
+) -> CurrentUserResponse:
+    """返回当前登录用户的公开信息。"""
+    return CurrentUserResponse(
+        id=current_user.id,
+        email=current_user.email,
     )

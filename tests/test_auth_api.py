@@ -87,3 +87,47 @@ def test_login_rejects_unknown_email(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.json()["detail"] == "邮箱或密码错误"
+
+
+def _authorization_headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+    }
+
+
+def test_get_me_returns_current_user(client: TestClient) -> None:
+    register_response = _register(client)
+    expected_user = register_response.json()
+
+    login_response = client.post(
+        "/auth/login",
+        json={
+            "email": "alice@example.com",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+    token = login_response.json()["access_token"]
+
+    response = client.get(
+        "/auth/me",
+        headers=_authorization_headers(token),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == expected_user
+
+
+def test_get_me_rejects_missing_token(client: TestClient) -> None:
+    response = client.get("/auth/me")
+
+    assert response.status_code == 401
+
+
+def test_get_me_rejects_invalid_token(client: TestClient) -> None:
+    response = client.get(
+        "/auth/me",
+        headers=_authorization_headers("not-a-valid-token"),
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "无效或已过期的访问令牌"
