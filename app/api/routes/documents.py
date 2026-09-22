@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile, status
 
+from app.api.dependencies.auth import CurrentUserDep
 from app.db.session import DbSession
 from app.schemas.documents import DocumentInfo
 from app.services import document_store, file_store
@@ -15,14 +16,24 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".xlsx"}
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
 
-def _cleanup_failed_upload(db: DbSession, document_id: str, stored_path: str) -> None:
-    """入库失败时清理：删记录（chunks 级联）+ 删文件。"""
-    document_store.delete(db, document_id)
+def _cleanup_failed_upload(
+    db: DbSession,
+    document_id: str,
+    user_id: str,
+    stored_path: str,
+) -> None:
+    """入库失败时清理数据库记录与文件。"""
+    document_store.delete(db, document_id, user_id)
     file_store.delete_file(stored_path)
 
 
 @router.post("/upload", response_model=DocumentInfo, status_code=status.HTTP_201_CREATED)
-async def upload_document(file: UploadFile, db: DbSession, embedder: EmbedderDep) -> DocumentInfo:
+async def upload_document(
+    file: UploadFile,
+    db: DbSession,
+    embedder: EmbedderDep,
+    current_user: CurrentUserDep,
+) -> DocumentInfo:
     """上传文档：落盘 → 写元数据 → 解析切分向量化入库（阶段 3 M1–M4）；失败回滚记录与文件。"""
     filename = file.filename or "unnamed"
     suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
@@ -49,18 +60,33 @@ async def upload_document(file: UploadFile, db: DbSession, embedder: EmbedderDep
         content_type=file.content_type or "application/octet-stream",
         uploaded_at=datetime.now(UTC),
     )
-    result = document_store.add(db, document, stored_path)
+    result = document_store.add(
+        db,
+        document,
+        user_id=current_user.id,
+        stored_path=stored_path,
+    )
 
     try:
         ingest_document(db, document_id, stored_path, embedder)
     except IngestError as exc:
-        _cleanup_failed_upload(db, document_id, stored_path)
+        _cleanup_failed_upload(
+            db,
+            document_id,
+            current_user.id,
+            stored_path,
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception as exc:
-        _cleanup_failed_upload(db, document_id, stored_path)
+        _cleanup_failed_upload(
+            db,
+            document_id,
+            current_user.id,
+            stored_path,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="文档处理失败，请稍后重试",
@@ -70,22 +96,55 @@ async def upload_document(file: UploadFile, db: DbSession, embedder: EmbedderDep
 
 
 @router.get("", response_model=list[DocumentInfo])
-async def list_documents(db: DbSession) -> list[DocumentInfo]:
-    return document_store.list_all(db)
+async def list_documents(
+    db: DbSession,
+    current_user: CurrentUserDep,
+) -> list[DocumentInfo]:
+    return document_store.list_all(db, current_user.id)
 
 
 @router.get("/{doc_id}", response_model=DocumentInfo)
-async def get_document(doc_id: str, db: DbSession) -> DocumentInfo:
-    document = document_store.get(db, doc_id)
+async def get_document(
+    doc_id: str,
+    db: DbSession,
+    current_user: CurrentUserDep,
+) -> DocumentInfo:
+    document = document_store.get(
+        db,
+        doc_id,
+        current_user.id,
+    )
+
     if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文档不存在",
+        )
+
     return document
 
 
 @router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document(doc_id: str, db: DbSession) -> None:
-    stored_path = document_store.get_stored_path(db, doc_id)
-    if not document_store.delete(db, doc_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
+async def delete_document(
+    doc_id: str,
+    db: DbSession,
+    current_user: CurrentUserDep,
+) -> None:
+    stored_path = document_store.get_stored_path(
+        db,
+        doc_id,
+        current_user.id,
+    )
+
+    if not document_store.delete(
+        db,
+        doc_id,
+        current_user.id,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文档不存在",
+        )
+
     if stored_path:
         file_store.delete_file(stored_path)
