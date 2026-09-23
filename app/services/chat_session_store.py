@@ -1,3 +1,14 @@
+"""会话数据访问层。
+
+职责：
+- 创建会话
+- 列出会话
+- 读取会话
+- 读取消息
+- 写入一轮消息
+- 删除会话
+"""
+
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -62,9 +73,11 @@ def create(
         created_at=now,
         updated_at=now,
     )
-
+    # → 加入当前数据库会话
     db.add(row)
+    # → 真实写入 PostgreSQL
     db.commit()
+    # → 从数据库重新读取该对象
     db.refresh(row)
 
     return _to_session_response(row)
@@ -77,6 +90,7 @@ def list_all(
     rows = db.scalars(
         select(ChatSession)
         .where(ChatSession.user_id == user_id)
+        # desc降序排序 （最近的会话排在最前面）
         .order_by(ChatSession.updated_at.desc()),
     ).all()
 
@@ -120,6 +134,7 @@ def list_messages(
     return [_to_message_response(row) for row in rows]
 
 
+# 写入一轮消息
 def add_turn(
     db: Session,
     *,
@@ -129,6 +144,7 @@ def add_turn(
     assistant_content: str,
 ) -> bool:
     """一次写入用户消息和助手消息，确保它们属于同一会话。"""
+    # 用户范围验证
     session = _get_session_row(
         db,
         session_id,
@@ -138,7 +154,7 @@ def add_turn(
         return False
 
     now = datetime.now(UTC)
-
+    # 一次加入两条记录
     db.add_all(
         [
             ChatMessage(
