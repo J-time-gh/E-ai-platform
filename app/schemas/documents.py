@@ -1,6 +1,14 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
+
+DocumentStatus = Literal[
+    "pending",
+    "processing",
+    "ready",
+    "failed",
+]
 
 
 class DocumentInfo(BaseModel):
@@ -9,3 +17,5 @@ class DocumentInfo(BaseModel):
     size: int
     content_type: str
     uploaded_at: datetime
+    status: DocumentStatus
+    ingest_error: str | None

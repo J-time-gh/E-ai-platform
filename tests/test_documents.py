@@ -67,6 +67,8 @@ def test_upload_returns_metadata(
     assert body["size"] == 11
     assert body["id"]
     assert body["uploaded_at"]
+    assert body["status"] == "ready"
+    assert body["ingest_error"] is None
 
 
 def test_upload_rejects_unsupported_type(

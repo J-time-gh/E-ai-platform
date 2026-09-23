@@ -15,6 +15,8 @@ def _to_info(row: Document) -> DocumentInfo:
         size=row.size,
         content_type=row.content_type,
         uploaded_at=row.uploaded_at,
+        status=row.status,
+        ingest_error=row.ingest_error,
     )
 
 
@@ -24,6 +26,7 @@ def add(
     *,
     user_id: str,
     stored_path: str | None = None,
+    status: str = "pending",
 ) -> DocumentInfo:
     """创建属于指定用户的文档记录。"""
     row = Document(
@@ -34,6 +37,8 @@ def add(
         content_type=document.content_type,
         uploaded_at=document.uploaded_at,
         stored_path=stored_path,
+        status=status,
+        ingest_error=None,
     )
 
     db.add(row)

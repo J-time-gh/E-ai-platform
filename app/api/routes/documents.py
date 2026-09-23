@@ -60,12 +60,15 @@ async def upload_document(
         size=len(content),
         content_type=file.content_type or "application/octet-stream",
         uploaded_at=datetime.now(UTC),
+        status="ready",
+        ingest_error=None,
     )
     result = document_store.add(
         db,
         document,
         user_id=current_user.id,
         stored_path=stored_path,
+        status="ready",
     )
 
     try:
