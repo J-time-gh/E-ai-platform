@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     database_url: str
     test_database_url: str
     redis_url: str
+    redis_embedding_ttl_seconds: int = 604800
+    redis_socket_timeout_seconds: float = 1.0
 
     upload_dir: str = "data/uploads"
     embedding_model: str = "BAAI/bge-m3"
