@@ -13,10 +13,10 @@ class Document(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     # JWT 关联用户
-    user_id: Mapped[str | None] = mapped_column(
+    user_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
     filename: Mapped[str] = mapped_column(String(255))
