@@ -1,3 +1,5 @@
+"""创建、复用 Redis Client"""
+
 from functools import lru_cache
 
 from redis import Redis
@@ -5,6 +7,7 @@ from redis import Redis
 from app.core.config import settings
 
 
+# 整个 FastAPI 进程 共用一个 Redis Client（最多缓存一个返回结果）
 @lru_cache(maxsize=1)
 def get_redis_client() -> Redis:
     """返回进程内复用的 Redis Client。"""

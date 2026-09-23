@@ -63,6 +63,7 @@ class FakeEmbedder:
         return [digest[i % len(digest)] / 255.0 - 0.5 for i in range(self._dim)]
 
 
+# Embedding Redis缓存部分新加入
 class CachedEmbedder:
     """为真实 Embedder 增加 Redis 缓存的装饰器。"""
 
@@ -97,7 +98,7 @@ class CachedEmbedder:
         unique_texts = list(dict.fromkeys(texts))
         vectors_by_text: dict[str, list[float]] = {}
         missing_texts: list[str] = []
-
+        # 缓存命中流程
         try:
             for text in unique_texts:
                 cached_value = self._redis.get(
@@ -130,12 +131,14 @@ class CachedEmbedder:
             for text, vector in zip(
                 missing_texts,
                 new_vectors,
+                # 如果文本数量和向量数量不一致→ 立即抛异常
                 strict=True,
             ):
                 vectors_by_text[text] = vector
-
+            # 写入 Redis 缓存
             try:
                 for text in missing_texts:
+                    # setex=写入 Key→ 同时设置过期时间
                     self._redis.setex(
                         self._cache_key(text),
                         settings.redis_embedding_ttl_seconds,

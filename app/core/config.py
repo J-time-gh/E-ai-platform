@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     database_url: str
     test_database_url: str
     redis_url: str
+    # 7 天内命中直接复用
     redis_embedding_ttl_seconds: int = 604800
     redis_socket_timeout_seconds: float = 1.0
 
