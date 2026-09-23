@@ -15,7 +15,8 @@
 - 模型服务兼容 LM Studio / vLLM 提供的 OpenAI 兼容接口
 - 工程化基础：Docker Compose、pytest、Ruff、GitHub Actions 和检索/Agent 评测
 
-> 当前没有正式前端、JWT 认证、用户隔离、会话持久化、真实 Redis 缓存、异步入库、结构化日志、压测、监控或 LLM Gateway。
+> 当前没有正式前端、Redis 限流、结构化日志、压测、监控或完整 LLM Gateway。
+> 已具备 JWT 用户认证与隔离、会话持久化、Redis 两层缓存，以及 RQ Worker 驱动的异步文档入库 MVP。
 
 ## 技术栈
 
@@ -24,7 +25,7 @@
 | Web 框架 | FastAPI + Uvicorn |
 | 配置管理 | pydantic-settings |
 | 数据库 | PostgreSQL + pgvector（阶段 2） |
-| 缓存 | Redis 依赖与配置（尚未接入实际缓存） |
+| 缓存 | Redis：Embedding 缓存、用户隔离 SearchResult 缓存、RQ 文档入库队列 |
 | 检索 | 向量检索 + BM25 + RRF 融合 + CrossEncoder 精排（阶段 4） |
 | 模型服务 | LM Studio / vLLM（OpenAI 兼容接口） |
 | Agent | LangGraph；RAG、受限 SQL 与安全数学表达式工具（阶段 5） |
@@ -47,6 +48,17 @@ uvicorn app.main:app --reload
 # 4. 打开接口文档
 # http://127.0.0.1:8000/docs
 ```
+
+### 异步文档入库（阶段 6.4 MVP）
+
+文档上传接口返回 `202 Accepted`，并创建状态为 `pending` 的文档记录。
+RQ Worker 在后台执行解析、切块、Embedding 与 Chunk 写入：
+
+```text
+pending → processing → ready
+                    ↘ failed
+```
+
 
 ## 项目结构
 

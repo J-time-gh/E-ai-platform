@@ -1,22 +1,26 @@
 # E-ai-platform 项目计划书（交接文档）
 
-> 更新于 2026-09-18 · 当前版本 **v0.4.0**（阶段 0–4 已完成）
+> 更新于 2026-09-23 · 当前开发分支 `feat/jwt-user-isolation`
 >
-> 本文档面向"接手这个项目的人"。读完应该能回答四个问题：
+> 当前发布定位：**v0.5.0rc1**。阶段 0–5、阶段 6.1 / 6.2 / 6.3a / 6.3b 已完成；阶段 6.3c 限流主动延期。
+>
+> 本文档面向“接手这个项目的人”。读完应该能回答四个问题：
 > ① 这个项目要做什么 ② 已经做到哪一步 ③ 下一步做什么 ④ 有哪些坑和约定必须遵守。
 
 ---
 
 ## 0. 速览
 
-| 项目 | 状态 |
+| 项目 | 当前状态 |
 |---|---|
-| 当前版本 | `v0.4.0`（阶段 4 完成） |
-| 代码规模 | 13 个 service 模块、4 个路由、3 组 schema、2 个 Alembic 迁移 |
-| 测试 | **72 passed**（9 个测试文件） |
-| 静态检查 | `ruff format` + `ruff check` 全绿 |
-| 检索质量 | **hit@5 100% / hit@1 93.3% / MRR 0.947 / 拒答正确率 100%** |
-| 下一个里程碑 | `v0.5.0` — 阶段 5：Agent 工具调用 |
+| 当前发布定位 | `v0.5.0rc1`（不是最终正式版） |
+| 已完成里程碑 | 阶段 0–5；阶段 6 的认证隔离、会话历史、Redis 两层缓存 |
+| 当前数据库迁移头 | `96cbce9a33f8`：强制 `documents.user_id NOT NULL` |
+| 检索质量基线 | **hit@5 100% / hit@1 93.3% / MRR 0.947 / 拒答正确率 100%** |
+| 下一开发项 | 阶段 6.4：大文件异步入库与状态查询 |
+| 限流 | 阶段 6.3c 已设计，当前主动延期 |
+
+> 测试数量会随功能持续变化，不在此写死。提交前必须执行完整 pytest，并以 CI / 实际命令输出为准。
 
 ---
 
@@ -31,7 +35,7 @@
 | Web 框架 | FastAPI + Uvicorn |
 | 配置管理 | pydantic-settings（`.env` 驱动，字段即环境变量名） |
 | 数据库 | PostgreSQL 16 + pgvector（HNSW 索引） |
-| 缓存 | Redis 5 |
+| 缓存 | Redis（Embedding 缓存、用户隔离 SearchResult 缓存） |
 | ORM / 迁移 | SQLAlchemy 2.0 + Alembic |
 | 检索 | 向量检索（bge-m3）+ BM25（jieba + rank_bm25）+ RRF 融合 + CrossEncoder 精排 |
 | 模型服务 | LM Studio / vLLM（OpenAI 兼容接口） |
@@ -159,14 +163,24 @@ app/db/            数据层：SQLAlchemy 模型 + 会话与事务（*_store.py 
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
+| POST | `/auth/register` | 注册用户并返回访问 Token |
+| POST | `/auth/login` | 登录并返回访问 Token |
+| GET | `/auth/me` | 获取当前登录用户 |
 | GET | `/health` | 健康检查 |
 | GET | `/` | 根端点 |
-| POST | `/documents/upload` | 上传文档并入库（解析 → 切块 → 向量化） |
-| GET | `/documents` | 列出所有文档 |
-| GET | `/documents/{id}` | 查询单个文档 |
-| DELETE | `/documents/{id}` | 删除文档（级联删 chunks + 落盘文件） |
-| POST | `/search` | 纯检索（**不门控**，用于评测检索质量） |
-| POST | `/chat` | RAG 问答（**门控**，检索为空则直接拒答） |
+| POST | `/documents/upload` | 当前用户上传文档并同步入库 |
+| GET | `/documents` | 列出当前用户文档 |
+| GET | `/documents/{id}` | 查询当前用户单个文档 |
+| DELETE | `/documents/{id}` | 删除当前用户文档、Chunk 与落盘文件 |
+| POST | `/search` | 当前用户纯检索（不门控，用于评测检索质量） |
+| POST | `/chat` | 当前用户 RAG 问答；支持持久化会话 |
+| POST | `/chat/sessions` | 创建当前用户会话 |
+| GET | `/chat/sessions` | 列出当前用户会话 |
+| GET | `/chat/sessions/{id}/messages` | 获取当前用户会话消息 |
+| DELETE | `/chat/sessions/{id}` | 删除当前用户会话与消息 |
+| POST | `/agent` | 当前用户 Agent 工具调用 |
+
+除 `/health`、`/`、认证端点外，业务端点均需 Bearer JWT。
 
 ### 3.2 四种检索模式（`mode` 参数）
 
@@ -187,60 +201,59 @@ app/db/            数据层：SQLAlchemy 模型 + 会话与事务（*_store.py 
 ### 3.4 Git 历史
 
 ```
+eed7cf6  feat: cache user-scoped search results
+e238ce7  docs: explain chat session persistence
+9eddf03  test: cover Redis embedding cache
+185e052  feat: cache embeddings with Redis
+3f5e88f  feat: require document owner
+1ce723b  feat: persist user chat sessions
+730d506  test: verify SQL tool user isolation
+feaf629  feat: scope Agent SQL tool to current user
+55aec0b  feat: isolate RAG retrieval by user
 127619b  docs: record phase 4.3 reranking results          ← v0.4.0
-e08ad26  feat: add cross-encoder reranking for hybrid retrieval
-d43645a  docs: record phase 4.2 retrieval comparison
-c28c120  feat: add RRF hybrid retrieval with pre-fusion score gating
-5e0a293  docs: record phase 4.1 retrieval comparison
-0ef8114  feat: add BM25 keyword retrieval and retrieval score gate
-02af1f4  docs: mark phase 3 complete with evaluation baseline   ← v0.3.0
 ```
 
-**提交约定**：功能一笔 `feat:`、文档/评测一笔 `docs:`，与既有历史保持一致。
+**提交约定**：功能一笔 `feat:`、测试一笔 `test:`、文档/评测一笔 `docs:`。不要提交 `.env`、数据库内容、上传文件、模型缓存或 `evals/results/`。
 
 ---
 
-## 4. 接下来的计划（阶段 5–9）
+## 4. 当前进度与接下来的计划（阶段 5–9）
 
-### 阶段 5：Agent 工具调用 → `v0.5.0` ★下一个里程碑
+### 阶段 5：Agent 工具调用 ✅ 功能完成，正式验收待补
 
-**目标**：让模型自己决定"这个问题该查知识库、查数据库、还是跑一段 Python"。
+原目标：让模型自己决定“该查知识库、查受限数据库模板，还是跑一段 Python”。
 
-**要交付的模块**：
-
-| 模块 | 说明 |
+| 原计划模块 | 当前状态 |
 |---|---|
-| `app/services/tools/` | 工具注册表：`Tool` Protocol（`name` / `description` / `run(args)`）+ 注册与查找 |
-| `rag_search` 工具 | 直接复用现有 `search_with_mode(..., mode="hybrid_rerank")` |
-| `sql_query` 工具 | **只读** SQL（白名单表 + 禁止 DDL/DML + 超时 + 行数上限） |
-| `python_sandbox` 工具 | 受限执行（无网络、无文件写入、超时），用于计算类问题 |
-| `app/services/agent.py` | LangGraph 状态机：`规划 → 调工具 → 观察 → 再规划 / 回答` |
-| `POST /agent` | 新端点，返回 `{answer, steps[], tool_calls[]}` |
-| `evals/agent_questions.jsonl` | ≥10 道工具调用评测题（含需要多步的） |
+| `app/services/tools/` | 已完成工具协议与实现 |
+| `rag_search` 工具 | 已复用 `search_with_mode()`；服务端绑定当前用户 ID |
+| `sql_query` 工具 | 已限制为固定只读 SQL 模板、参数化、超时与行数上限 |
+| `python_sandbox` 工具 | 已限制为受限表达式计算，无网络、无文件写入、无数据库访问 |
+| `app/services/agent.py` / `POST /agent` | 已完成 LangGraph Agent 与端点 |
+| `evals/agent_questions.jsonl` | 正式多步端到端验收仍待补 |
 
-**验收标准（可量化）**：
+安全原则：LLM 可以选择工具与查询文本，但**不能传入 user_id、执行任意 SQL 或执行系统命令**。
 
-- 工具选择准确率 ≥ **80%**
-- 多步任务端到端成功率 ≥ **70%**
-- 危险操作（写库 / 删除 / 执行系统命令）**100% 被拒绝**
-- 单次任务平均步数 ≤ 4，且有最大步数兜底
-
-**第一步可以这么开始**：装 `langgraph` → 定义 `Tool` Protocol + 注册表 → 把现有检索包成第一个工具 → 写最小的 `规划 → 调工具 → 回答` 循环 → 加 `/agent` 端点与测试替身。
+> 历史运行评测达到 19/20；多步 RAG → Python 的固定材料场景尚未完成正式端到端验收，因此不能宣称阶段 5 已完整验收。
 
 ---
 
-### 阶段 6：工程化 → `v0.6.0`
+### 阶段 6：工程化 → 当前进行中
 
-| # | 事项 | 说明 |
+| # | 事项 | 当前状态 |
 |---|---|---|
-| 1 | **JWT 认证 + 用户隔离** | 注册/登录、`documents` 加 `owner_id`、所有查询按用户过滤 |
-| 2 | **会话历史持久化** | `chat_sessions` / `chat_messages` 表，替换现在由前端传 `history` 的做法 |
-| 3 | **Redis 缓存** | embedding 缓存、检索结果缓存、限流（Redis 已在依赖里但尚未使用） |
-| 4 | **异步任务** | 大文件后台入库 + 任务状态查询端点 |
-| 5 | **结构化日志** | JSON 日志 + `request_id` 贯穿全链路 |
-| 6 | **压测** | locust 脚本，产出 P50 / P95 / 错误率 |
+| 1 | **JWT 认证 + 用户隔离** | ✅ 注册/登录/`/auth/me`；Document、检索、Chat、Agent 都按 `current_user.id` 过滤；`documents.user_id NOT NULL` |
+| 2 | **会话历史持久化** | ✅ `chat_sessions` / `chat_messages`；数据库历史为 session 模式唯一来源 |
+| 3a | **Embedding Redis 缓存** | ✅ 文本哈希 Key、模型隔离、7 天 TTL、故障降级 |
+| 3b | **用户隔离 SearchResult 缓存** | ✅ `user_id + version + parameters_hash` Key、60 秒 TTL、上传/删除版本失效 |
+| 3c | **Redis 限流** | ⏸️ 主动延期；上线、真实额度或压测前补 |
+| 4 | **异步任务** | ✅ MVP 已完成：上传返回 `202 + pending`；RQ Queue + Worker 后台入库；`pending → processing → ready/failed`；仅 `ready` 文档可检索；单测与 Windows SpawnWorker 端到端验证通过。Worker 中断恢复、自动重试与 Outbox 待后续完成。 |
+| 5 | **结构化日志** | 待做：JSON 日志 + `request_id` + 缓存/模型耗时 |
+| 6 | **压测** | 待做：Locust、P50/P95/错误率/缓存命中率 |
 
-**验收**：核心端点认证覆盖率 100%；缓存命中率 > 30%；压测报告（50 并发下的 P95）。
+异步入库原则：上传后可立即看到文件记录或预览原文件；只有状态为 `ready` 的文档才能参与 Search / Chat / Agent。当前 MVP 使用 Redis RQ Queue + 独立 Worker，不能把 FastAPI `BackgroundTasks` 伪装成可恢复任务队列。Windows 本地开发使用 `SpawnWorker`，生产 Linux 环境可使用默认 fork Worker。
+
+**阶段 6 最终验收**：认证覆盖、缓存命中率、限流、异步状态、结构化日志与压测报告均需完成后再进行。
 
 ---
 
@@ -275,41 +288,50 @@ c28c120  feat: add RRF hybrid retrieval with pre-fusion score gating
 
 | # | 问题 | 影响 | 建议 |
 |---|---|---|---|
-| 1 | 「《实践论》批判了哪两种错误倾向？」两轮评测都排第 5 | 卡在 `top_k=5` 边界上 | 已如实记录为语料的真实检索难度；如需改善可换 `bge-reranker-v2-m3`（改 `.env` 一行） |
-| 2 | 生成层有采样噪声 | 同一题两轮可能一次答出、一次拒答 | 检索层指标可复现，生成层指标需多轮取平均 |
-| 3 | 前三轮评测延迟为并发测量 | README 延迟对比带星号 | 串行重跑 vector / bm25 / hybrid 三轮统一口径 |
-| 4 | `pyproject.toml` 的 `version` 仍是 `0.1.0` | 与 tag `v0.4.0` 不一致 | 阶段 5 顺手改成 `0.5.0` 并纳入发布流程 |
+| 1 | 「《实践论》批判了哪两种错误倾向？」两轮评测都排第 5 | 卡在 `top_k=5` 边界上 | 如需改善可评估 `bge-reranker-v2-m3` |
+| 2 | 生成层有采样噪声 | 同一题两轮可能一次答出、一次拒答 | 检索层指标可复现，生成层需多轮取平均 |
+| 3 | 前三轮评测延迟为并发测量 | README 延迟对比带星号 | 串行重跑 vector / bm25 / hybrid 统一口径 |
+| 4 | `pyproject.toml` 的 `version` 仍是 `0.1.0` | 与当前发布定位不一致 | 正式发布前更新版本与发布流程 |
 | 5 | BM25 索引是**进程内全量重建** | 语料上万块后内存与重建耗时会失控 | 大语料应换成 Elasticsearch / OpenSearch |
-| 6 | `chunks.embedding` 绑定 `vector(1024)` | 换 embedding 模型必须迁移整表 | 已知约束，已在文档说明 |
-| 7 | `evals/report.md` 是阶段 3 的旧数据 | 容易看错 | 删除或改名 `report-phase3-baseline.md` |
-| 8 | `probe_rerank` 探针脚本未入库 | 换精排模型时要重新手写标定脚本 | 建议补进 `evals/` |
-
+| 6 | `chunks.embedding` 绑定 `vector(1024)` | 换 Embedding 模型需要迁移与重建向量 | 作为明确发布操作处理 |
+| 7 | Agent 正式多步端到端验收未完成 | 不能宣称阶段 5 全部验收 | 准备固定 RAG 材料后重跑评测 |
+| 8 | 用户隔离是应用查询层，不是 PostgreSQL RLS | 后端服务账号能读共享表 | 更高隔离需求时评估 RLS / 独立租户策略 |
+| 9 | Redis Embedding 缓存 TTL 为 7 天，Redis 未在应用层设置内存上限 | 缓存量大时可能占用较多内存 | 部署时设置 `maxmemory` 与适合缓存的淘汰策略 |
+| 10 | Search 缓存当前以单元测试为主 | 上传/删除触发失效与 retrieval 命中缺少接口级验证 | 补缓存路由集成测试 |
+| 11 | Redis 限流延期 | 当前没有高频调用保护 | 上线、真实额度或压测前完成阶段 6.3c |
+| 12 | Worker 中断后的任务恢复未完成 | RQ Job 可能进入 Abandoned/Failed，Document 可能停留在 `pending` 或 `processing` | 后续增加重试接口、任务尝试次数、超时扫描与 Transactional Outbox |
 ---
 
 ## 6. 工程纪律（每天都要遵守）
 
 ### 6.1 环境
 
-1. **所有命令显式走 `.venv\Scripts\python.exe -m ...`**，不要用裸 `pip` / `python` / `pytest` / `uvicorn`
-2. 看中文输出前先 `chcp 65001`；Python 脚本再加 `$PYTHONIOENCODING='utf-8'`
-3. 跑测试前先确认 **Docker 起着**（PostgreSQL 5432）。数据库没起的典型症状是 `ERROR at setup of ...` + `psycopg.errors.ConnectionTimeout`
+1. **所有命令显式走 `.venv\Scripts\python.exe -m ...`**，不要用裸 `pip` / `python` / `pytest` / `uvicorn`。
+2. 看中文输出前先 `chcp 65001`；Python 脚本再加 `$PYTHONIOENCODING='utf-8'`。
+3. 跑测试前确认 PostgreSQL 可连接；验证真实缓存时确认 Redis `PING` 返回 `True`。
+4. `.env` 只存在本机，不能提交；密码、JWT Secret、Token、Authorization Header 不能写进日志、测试快照或文档。
 
 ### 6.2 提交前必跑
 
 ```powershell
-.\.venv\Scripts\python.exe -m ruff format .
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m pytest -q --tb=line      # 期望 72 passed
+.\.venv\Scripts\python.exe -m ruff format app tests
+.\.venv\Scripts\python.exe -m ruff check app tests --no-cache
+.\.venv\Scripts\python.exe -m pytest -q --tb=line
+.\.venv\Scripts\python.exe -m alembic current
 ```
+
+数据库迁移变更时，确认 `alembic current` 与最新 migration head 一致。
 
 ### 6.3 改代码时的几条硬规矩
 
-1. **粘完大段代码先核对行数，再跑最小的那个测试**（`pytest tests/test_chat.py` 只需 3 秒）
-2. **改完函数签名先用 `--limit 3` 跑通全流程**，别等 20 题跑完才发现最后一行的 bug
-3. **每个文件末尾必须有换行符**（VS Code 开 `files.insertFinalNewline`）；ruff 报的列号 = 行长 + 1 就是缺换行
-4. **阈值和开关一律做成配置项**（`settings.xxx`），不要硬编码——测试环境会被线上参数绑架
-5. **评测必须串行跑**，一轮结束再开下一轮
-6. **新增外部依赖必须走 Protocol + 替身 + 依赖注入**那套模式
+1. **粘完大段代码先核对行数，再跑最小的那个测试**（`pytest tests/test_chat.py` 只需 3 秒）。
+2. **改完函数签名先用 `--limit 3` 跑通全流程**，别等 20 题跑完才发现最后一行的 bug。
+3. **每个文件末尾必须有换行符**（VS Code 开 `files.insertFinalNewline`）；ruff 报的列号 = 行长 + 1 往往是缺换行。
+4. **阈值、TTL 和开关一律做成配置项**（`settings.xxx`），不要硬编码；新增 `settings` 字段时必须同时声明在 `Settings` 类中。
+5. **评测必须串行跑**，一轮结束再开下一轮。
+6. **新增外部依赖必须走 Protocol + 替身 + 依赖注入**那套模式。
+7. 含用户私有结果的缓存 Key 必须使用服务端可信 `user_id`；数据写入、删除时必须设计缓存失效。
+8. 不能提交 `.env`、上传资料、数据库数据、模型文件或 `evals/results/`。
 
 ### 6.4 读报错的方法
 
@@ -335,6 +357,8 @@ c28c120  feat: add RRF hybrid retrieval with pre-fusion score gating
 | 评测报告 | `evals/report-{vector,bm25,hybrid,hybrid_rerank}.md` | 四份逐题明细 |
 | 题库 | `evals/questions.jsonl` | 20 题（15 可答 + 5 库外） |
 | 评测脚本 | `evals/run_eval.py` | `--mode` / `--limit` |
+| Embedding 缓存测试 | `tests/test_embedding_cache.py` | 命中、去重、Redis 故障降级 |
+| Search 缓存测试 | `tests/test_search_cache.py` | 用户隔离、读写、版本失效 |
 
 ---
 
