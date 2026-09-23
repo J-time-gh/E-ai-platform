@@ -1,43 +1,26 @@
 """RAG 对话接口测试：LLM 走 FakeLLMClient，全程不发真实网络请求。"""
 
-import io
-
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.services.rag import NO_CONTEXT_REPLY
 
 
-def _upload(
-    client: TestClient,
-    headers: dict[str, str],
-    filename: str,
-    content: str,
-) -> None:
-    response = client.post(
-        "/documents/upload",
-        headers=headers,
-        files={
-            "file": (
-                filename,
-                io.BytesIO(content.encode()),
-                "text/plain",
-            ),
-        },
-    )
-    assert response.status_code == 201
-
-
 # fake_llm 故意不写类型注解：它由 conftest 提供，跨文件导入 conftest 更脆
 def test_chat_returns_llm_reply_with_sources(
-    client: TestClient, fake_llm, authenticated_headers: dict[str, str]
+    client: TestClient,
+    fake_llm,
+    authenticated_headers: dict[str, str],
+    upload_ready_document,
 ) -> None:
-    _upload(client, authenticated_headers, "ml.txt", "机器学习是人工智能的一个分支。")
+    text = "机器学习是人工智能的一个分支。"
+    upload_ready_document(authenticated_headers, "ml.txt", text)
+
     # 问句必须与入库文本完全一致：FakeEmbedder 是哈希向量，无语义
     body = client.post(
         "/chat",
         headers=authenticated_headers,
-        json={"message": "机器学习是人工智能的一个分支。"},
+        json={"message": text},
     ).json()
 
     assert body["reply"] == fake_llm.reply
@@ -50,9 +33,9 @@ def test_chat_prompt_contains_retrieved_chunk(
     client: TestClient,
     fake_llm,
     authenticated_headers: dict[str, str],
+    upload_ready_document,
 ) -> None:
-    _upload(
-        client,
+    upload_ready_document(
         authenticated_headers,
         "ml.txt",
         "机器学习是人工智能的一个分支。",
@@ -73,9 +56,17 @@ def test_chat_prompt_contains_retrieved_chunk(
 
 
 def test_chat_inserts_history_between_system_and_question(
-    client: TestClient, fake_llm, authenticated_headers: dict[str, str]
+    client: TestClient,
+    fake_llm,
+    authenticated_headers: dict[str, str],
+    upload_ready_document,
 ) -> None:
-    _upload(client, authenticated_headers, "ml.txt", "机器学习是人工智能的一个分支。")
+    upload_ready_document(
+        authenticated_headers,
+        "ml.txt",
+        "机器学习是人工智能的一个分支。",
+    )
+
     client.post(
         "/chat",
         headers=authenticated_headers,
@@ -83,15 +74,20 @@ def test_chat_inserts_history_between_system_and_question(
     )
 
     messages = fake_llm.last_messages
-    assert [m["role"] for m in messages] == ["system", "user", "user"]
+
+    assert [message["role"] for message in messages] == ["system", "user", "user"]
     assert messages[1]["content"] == "上一个问题"
 
 
 def test_chat_without_documents_skips_llm(
-    client: TestClient, fake_llm, authenticated_headers: dict[str, str]
+    client: TestClient,
+    fake_llm,
+    authenticated_headers: dict[str, str],
 ) -> None:
     body = client.post(
-        "/chat", headers=authenticated_headers, json={"message": "知识库里有什么？"}
+        "/chat",
+        headers=authenticated_headers,
+        json={"message": "知识库里有什么？"},
     ).json()
 
     assert body["reply"] == NO_CONTEXT_REPLY
@@ -100,23 +96,39 @@ def test_chat_without_documents_skips_llm(
 
 
 def test_chat_returns_503_when_llm_unavailable(
-    client: TestClient, fake_llm, authenticated_headers: dict[str, str]
+    client: TestClient,
+    fake_llm,
+    authenticated_headers: dict[str, str],
+    upload_ready_document,
 ) -> None:
-    _upload(client, authenticated_headers, "ml.txt", "机器学习是人工智能的一个分支。")
+    upload_ready_document(
+        authenticated_headers,
+        "ml.txt",
+        "机器学习是人工智能的一个分支。",
+    )
     fake_llm.fail = True
 
-    assert (
-        client.post(
-            "/chat", headers=authenticated_headers, json={"message": "机器学习是什么？"}
-        ).status_code
-        == 503
+    response = client.post(
+        "/chat",
+        headers=authenticated_headers,
+        json={"message": "机器学习是什么？"},
     )
+
+    assert response.status_code == 503
 
 
 def test_chat_accepts_model_override(
-    client: TestClient, fake_llm, authenticated_headers: dict[str, str]
+    client: TestClient,
+    fake_llm,
+    authenticated_headers: dict[str, str],
+    upload_ready_document,
 ) -> None:
-    _upload(client, authenticated_headers, "ml.txt", "机器学习是人工智能的一个分支。")
+    upload_ready_document(
+        authenticated_headers,
+        "ml.txt",
+        "机器学习是人工智能的一个分支。",
+    )
+
     body = client.post(
         "/chat",
         headers=authenticated_headers,
@@ -128,7 +140,8 @@ def test_chat_accepts_model_override(
 
 
 def test_chat_rejects_empty_message(
-    client: TestClient, authenticated_headers: dict[str, str]
+    client: TestClient,
+    authenticated_headers: dict[str, str],
 ) -> None:
     assert (
         client.post("/chat", headers=authenticated_headers, json={"message": ""}).status_code == 422
@@ -136,24 +149,30 @@ def test_chat_rejects_empty_message(
 
 
 def test_chat_rejects_invalid_role(
-    client: TestClient, authenticated_headers: dict[str, str]
+    client: TestClient,
+    authenticated_headers: dict[str, str],
 ) -> None:
     payload = {"message": "hi", "history": [{"role": "boss", "content": "hello"}]}
     assert client.post("/chat", headers=authenticated_headers, json=payload).status_code == 422
 
 
 def test_chat_rejects_top_k_out_of_range(
-    client: TestClient, authenticated_headers: dict[str, str]
+    client: TestClient,
+    authenticated_headers: dict[str, str],
 ) -> None:
     assert (
         client.post(
-            "/chat", headers=authenticated_headers, json={"message": "hi", "top_k": 0}
+            "/chat",
+            headers=authenticated_headers,
+            json={"message": "hi", "top_k": 0},
         ).status_code
         == 422
     )
     assert (
         client.post(
-            "/chat", headers=authenticated_headers, json={"message": "hi", "top_k": 100}
+            "/chat",
+            headers=authenticated_headers,
+            json={"message": "hi", "top_k": 100},
         ).status_code
         == 422
     )

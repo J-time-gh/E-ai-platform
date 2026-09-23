@@ -115,7 +115,10 @@ class Bm25Index:
                 func.max(Chunk.created_at),
             )
             .join(Document, Chunk.document_id == Document.id)
-            .where(Document.user_id == self._user_id),
+            .where(
+                Document.user_id == self._user_id,
+                Document.status == "ready",
+            )
         ).one()
 
         return int(total), latest
@@ -125,7 +128,10 @@ class Bm25Index:
         rows = db.execute(
             select(Chunk, Document.filename)
             .join(Document, Chunk.document_id == Document.id)
-            .where(Document.user_id == self._user_id),
+            .where(
+                Document.user_id == self._user_id,
+                Document.status == "ready",
+            )
         ).all()
 
         self._rows = []

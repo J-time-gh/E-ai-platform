@@ -4,10 +4,8 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 
 from app.core.config import settings
-from app.db.models.chunk import EMBEDDING_DIM, Chunk
 
 
 @pytest.fixture
@@ -55,20 +53,25 @@ def test_documents_require_authentication(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_upload_returns_metadata(
+def test_upload_returns_pending_metadata(
     client: TestClient,
     auth_headers: dict[str, str],
+    fake_ingest_queue,
 ) -> None:
     response = _upload(client, auth_headers)
 
-    assert response.status_code == 201
+    assert response.status_code == 202
+
     body = response.json()
+
     assert body["filename"] == "notes.txt"
     assert body["size"] == 11
     assert body["id"]
     assert body["uploaded_at"]
-    assert body["status"] == "ready"
+    assert body["status"] == "pending"
     assert body["ingest_error"] is None
+
+    assert fake_ingest_queue.document_ids == [body["id"]]
 
 
 def test_upload_rejects_unsupported_type(
@@ -100,7 +103,10 @@ def test_list_documents(
     response = client.get("/documents", headers=auth_headers)
 
     assert response.status_code == 200
-    assert len(response.json()) == 2
+
+    documents = response.json()
+    assert len(documents) == 2
+    assert all(document["status"] == "pending" for document in documents)
 
 
 def test_get_document_by_id(
@@ -166,53 +172,51 @@ def test_delete_removes_file_from_disk(
     assert not path.exists()
 
 
-def test_upload_ingests_chunks(
+def test_delete_pending_document_removes_file_and_record(
     client: TestClient,
     auth_headers: dict[str, str],
-    db_session,
-) -> None:
-    content = ("这是用于测试切块的句子。" * 100).encode("utf-8")
-    doc_id = _upload(
-        client,
-        auth_headers,
-        filename="book.txt",
-        content=content,
-    ).json()["id"]
-
-    rows = db_session.scalars(
-        select(Chunk).where(Chunk.document_id == doc_id).order_by(Chunk.chunk_index),
-    ).all()
-
-    assert len(rows) > 1
-    assert [row.chunk_index for row in rows] == list(range(len(rows)))
-    assert all(len(row.embedding) == EMBEDDING_DIM for row in rows)
-
-
-def test_delete_document_removes_chunks(
-    client: TestClient,
-    auth_headers: dict[str, str],
-    db_session,
 ) -> None:
     doc_id = _upload(client, auth_headers).json()["id"]
+    path = next(Path(settings.upload_dir).glob(f"{doc_id}*"))
 
-    assert db_session.scalars(select(Chunk).where(Chunk.document_id == doc_id)).all()
-    assert client.delete(f"/documents/{doc_id}", headers=auth_headers).status_code == 204
-    assert not db_session.scalars(select(Chunk).where(Chunk.document_id == doc_id)).all()
+    response = client.delete(
+        f"/documents/{doc_id}",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 204
+    assert not path.exists()
+
+    get_response = client.get(
+        f"/documents/{doc_id}",
+        headers=auth_headers,
+    )
+    assert get_response.status_code == 404
 
 
-def test_upload_empty_file_returns_422_and_cleans_up(
+def test_pending_document_is_not_searchable(
     client: TestClient,
     auth_headers: dict[str, str],
 ) -> None:
+    text = "这是尚未完成入库的机密资料"
+
     response = _upload(
         client,
         auth_headers,
-        filename="empty.txt",
-        content=b"   \n",
+        filename="pending.txt",
+        content=text.encode(),
     )
 
-    assert response.status_code == 422
-    assert "文本" in response.json()["detail"]
+    assert response.status_code == 202
 
-    documents = client.get("/documents", headers=auth_headers).json()
-    assert all(document["filename"] != "empty.txt" for document in documents)
+    search_response = client.post(
+        "/search",
+        headers=auth_headers,
+        json={
+            "query": text,
+            "top_k": 5,
+        },
+    )
+
+    assert search_response.status_code == 200
+    assert search_response.json() == []

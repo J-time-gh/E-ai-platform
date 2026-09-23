@@ -28,7 +28,10 @@ def search_chunks(
     rows = db.execute(
         select(Chunk, Document.filename, distance)
         .join(Document, Chunk.document_id == Document.id)
-        .where(Document.user_id == user_id)
+        .where(
+            Document.user_id == user_id,
+            Document.status == "ready",
+        )
         .order_by(distance)
         .limit(top_k)
     ).all()

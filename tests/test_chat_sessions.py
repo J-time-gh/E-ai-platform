@@ -1,5 +1,3 @@
-import io
-
 from fastapi.testclient import TestClient
 
 
@@ -31,27 +29,6 @@ def _auth_headers(
     return {
         "Authorization": f"Bearer {login_response.json()['access_token']}",
     }
-
-
-def _upload(
-    client: TestClient,
-    headers: dict[str, str],
-    filename: str,
-    content: str,
-) -> None:
-    """用指定用户上传一份文本资料。"""
-    response = client.post(
-        "/documents/upload",
-        headers=headers,
-        files={
-            "file": (
-                filename,
-                io.BytesIO(content.encode()),
-                "text/plain",
-            ),
-        },
-    )
-    assert response.status_code == 201
 
 
 def _create_session(
@@ -122,6 +99,7 @@ def test_user_can_create_and_list_own_chat_sessions(
 def test_chat_persists_user_and_assistant_messages(
     client: TestClient,
     fake_llm,
+    upload_ready_document,
 ) -> None:
     """一次成功 Chat 应保存一条 user 消息和一条 assistant 消息。"""
     headers = _auth_headers(
@@ -135,8 +113,7 @@ def test_chat_persists_user_and_assistant_messages(
     )
 
     text = "机器学习是人工智能的一个分支。"
-    _upload(
-        client,
+    upload_ready_document(
         headers,
         "ml.txt",
         text,
@@ -251,6 +228,7 @@ def test_chat_rejects_history_when_session_id_is_provided(
 def test_user_can_delete_own_session_and_messages(
     client: TestClient,
     fake_llm,
+    upload_ready_document,
 ) -> None:
     """删除会话后，关联消息应因数据库 CASCADE 一并删除。"""
     headers = _auth_headers(
@@ -263,8 +241,7 @@ def test_user_can_delete_own_session_and_messages(
     )
 
     text = "删除会话前的测试资料"
-    _upload(
-        client,
+    upload_ready_document(
         headers,
         "delete.txt",
         text,

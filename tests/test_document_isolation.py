@@ -44,7 +44,7 @@ def _upload_document(
             ),
         },
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
 
     return response.json()["id"]
 

@@ -108,3 +108,59 @@ def delete(
     db.commit()
 
     return True
+
+
+# 加 Worker 专用状态方法
+def claim_for_ingest(
+    db: Session,
+    document_id: str,
+) -> Document | None:
+    """原子认领一个 pending 文档，避免重复 Worker 同时处理。"""
+    row = db.scalar(
+        select(Document).where(Document.id == document_id).with_for_update(),
+    )
+
+    if row is None or row.status != "pending":
+        return None
+
+    row.status = "processing"
+    row.ingest_error = None
+    db.commit()
+    db.refresh(row)
+
+    return row
+
+
+def mark_ready(
+    db: Session,
+    document_id: str,
+) -> str | None:
+    """将 processing 文档标记 ready，返回所属 user_id。"""
+    row = db.get(Document, document_id)
+
+    if row is None:
+        return None
+
+    row.status = "ready"
+    row.ingest_error = None
+    db.commit()
+
+    return row.user_id
+
+
+def mark_failed(
+    db: Session,
+    document_id: str,
+    error_message: str,
+) -> str | None:
+    """将文档标记 failed，错误信息只保存可安全展示给用户的内容。"""
+    row = db.get(Document, document_id)
+
+    if row is None:
+        return None
+
+    row.status = "failed"
+    row.ingest_error = error_message[:1000]
+    db.commit()
+
+    return row.user_id

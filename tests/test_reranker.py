@@ -1,7 +1,5 @@
 """精排测试：用假实现，不加载模型、不连数据库。"""
 
-import io
-
 from fastapi.testclient import TestClient
 
 from app.schemas.search import SearchResult
@@ -86,20 +84,14 @@ def test_hybrid_rerank_mode_is_accepted(
     client: TestClient,
     fake_reranker: FakeReranker,
     authenticated_headers: dict[str, str],
+    upload_ready_document,
 ) -> None:
     """API 层接受 hybrid_rerank，并且真的调用精排。"""
-    response = client.post(
-        "/documents/upload",
-        headers=authenticated_headers,
-        files={
-            "file": (
-                "rerank.txt",
-                io.BytesIO("苹果香蕉橘子".encode()),
-                "text/plain",
-            ),
-        },
+    upload_ready_document(
+        authenticated_headers,
+        "rerank.txt",
+        "苹果香蕉橘子",
     )
-    assert response.status_code == 201
 
     search = client.post(
         "/search",

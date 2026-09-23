@@ -1,5 +1,3 @@
-import io
-
 from fastapi.testclient import TestClient
 
 
@@ -33,32 +31,10 @@ def _auth_headers(
     }
 
 
-def _upload(
-    client: TestClient,
-    headers: dict[str, str],
-    filename: str,
-    content: str,
-) -> str:
-    """以指定用户身份上传文档，返回新文档的 document_id。"""
-    response = client.post(
-        "/documents/upload",
-        headers=headers,
-        files={
-            "file": (
-                filename,
-                io.BytesIO(content.encode()),
-                "text/plain",
-            ),
-        },
-    )
-    assert response.status_code == 201
-
-    return response.json()["id"]
-
-
 def test_agent_sql_query_can_read_own_chunks(
     client: TestClient,
     fake_llm,
+    upload_ready_document,
 ) -> None:
     """用户 A 的 Agent 可以读取用户 A 自己文档的 Chunk。"""
     user_a_headers = _auth_headers(
@@ -67,8 +43,7 @@ def test_agent_sql_query_can_read_own_chunks(
     )
 
     private_text = "用户A自己的SQL资料"
-    document_id = _upload(
-        client,
+    document_id = upload_ready_document(
         user_a_headers,
         "own-document.txt",
         private_text,
@@ -108,6 +83,7 @@ def test_agent_sql_query_can_read_own_chunks(
 def test_agent_sql_query_cannot_read_another_users_chunks(
     client: TestClient,
     fake_llm,
+    upload_ready_document,
 ) -> None:
     """用户 B 的 Agent 不能读取用户 A 文档的 Chunk。"""
     user_a_headers = _auth_headers(
@@ -119,8 +95,7 @@ def test_agent_sql_query_cannot_read_another_users_chunks(
         "sql-user-b@example.com",
     )
 
-    document_id = _upload(
-        client,
+    document_id = upload_ready_document(
         user_a_headers,
         "private.txt",
         "用户A的SQL私有资料",

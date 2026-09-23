@@ -7,8 +7,10 @@ from app.api.dependencies.auth import CurrentUserDep
 from app.db.session import DbSession
 from app.schemas.documents import DocumentInfo
 from app.services import document_store, file_store
-from app.services.embedding import EmbedderDep
-from app.services.ingest import IngestError, ingest_document
+from app.services.ingest_queue import (
+    IngestQueueDep,
+    QueueUnavailableError,
+)
 from app.services.search_cache import invalidate_search_cache
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -28,16 +30,20 @@ def _cleanup_failed_upload(
     file_store.delete_file(stored_path)
 
 
-@router.post("/upload", response_model=DocumentInfo, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/upload",
+    response_model=DocumentInfo,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def upload_document(
     file: UploadFile,
     db: DbSession,
-    embedder: EmbedderDep,
     current_user: CurrentUserDep,
+    ingest_queue: IngestQueueDep,
 ) -> DocumentInfo:
-    """上传文档：落盘 → 写元数据 → 解析切分向量化入库（阶段 3 M1–M4）；失败回滚记录与文件。"""
     filename = file.filename or "unnamed"
     suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -45,6 +51,7 @@ async def upload_document(
         )
 
     content = await file.read()
+
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
@@ -52,7 +59,11 @@ async def upload_document(
         )
 
     document_id = str(uuid4())
-    stored_path = file_store.save_file(document_id, suffix, content)
+    stored_path = file_store.save_file(
+        document_id,
+        suffix,
+        content,
+    )
 
     document = DocumentInfo(
         id=document_id,
@@ -60,46 +71,32 @@ async def upload_document(
         size=len(content),
         content_type=file.content_type or "application/octet-stream",
         uploaded_at=datetime.now(UTC),
-        status="ready",
+        status="pending",
         ingest_error=None,
     )
+
     result = document_store.add(
         db,
         document,
         user_id=current_user.id,
         stored_path=stored_path,
-        status="ready",
+        status="pending",
     )
 
     try:
-        ingest_document(db, document_id, stored_path, embedder)
-    except IngestError as exc:
-        _cleanup_failed_upload(
+        ingest_queue.enqueue(result.id)
+    except QueueUnavailableError:
+        document_store.mark_failed(
             db,
-            document_id,
-            current_user.id,
-            stored_path,
+            result.id,
+            "文档已接收，但暂时无法进入处理队列，请稍后重试。",
         )
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
-        _cleanup_failed_upload(
-            db,
-            document_id,
-            current_user.id,
-            stored_path,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="文档处理失败，请稍后重试",
-        ) from exc
-    # 上传文档后让当前用户缓存失效
-    invalidate_search_cache(
+
+    return document_store.get(
+        db,
+        result.id,
         current_user.id,
     )
-    return result
 
 
 @router.get("", response_model=list[DocumentInfo])

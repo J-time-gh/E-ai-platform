@@ -1,5 +1,3 @@
-import io
-
 from fastapi.testclient import TestClient
 
 from app.services.rag import NO_CONTEXT_REPLY
@@ -11,7 +9,6 @@ def _auth_headers(
 ) -> dict[str, str]:
     """注册并登录一个测试用户，返回 Bearer Token Header。"""
     password = "correct-horse-battery-staple"
-
     register_response = client.post(
         "/auth/register",
         json={
@@ -33,29 +30,6 @@ def _auth_headers(
     return {
         "Authorization": f"Bearer {login_response.json()['access_token']}",
     }
-
-
-def _upload(
-    client: TestClient,
-    headers: dict[str, str],
-    filename: str,
-    content: str,
-) -> str:
-    """以指定用户身份上传一份文档。"""
-    response = client.post(
-        "/documents/upload",
-        headers=headers,
-        files={
-            "file": (
-                filename,
-                io.BytesIO(content.encode()),
-                "text/plain",
-            ),
-        },
-    )
-    assert response.status_code == 201
-
-    return response.json()["id"]
 
 
 def _search(
@@ -81,14 +55,14 @@ def _search(
 
 def test_vector_search_isolated_by_user(
     client: TestClient,
+    upload_ready_document,
 ) -> None:
     """用户 B 不能通过向量检索读取用户 A 的私有资料。"""
     user_a_headers = _auth_headers(client, "vector-user-a@example.com")
     user_b_headers = _auth_headers(client, "vector-user-b@example.com")
 
     private_text = "用户A独有的向量检索机密关键词"
-    _upload(
-        client,
+    upload_ready_document(
         user_a_headers,
         "vector-private.txt",
         private_text,
@@ -112,14 +86,14 @@ def test_vector_search_isolated_by_user(
 
 def test_bm25_search_isolated_by_user(
     client: TestClient,
+    upload_ready_document,
 ) -> None:
     """用户 B 不能通过 BM25 索引读取用户 A 的私有资料。"""
     user_a_headers = _auth_headers(client, "bm25-user-a@example.com")
     user_b_headers = _auth_headers(client, "bm25-user-b@example.com")
 
     private_text = "用户A独有的BM25关键词量子报销"
-    _upload(
-        client,
+    upload_ready_document(
         user_a_headers,
         "bm25-private.txt",
         private_text,
@@ -146,14 +120,14 @@ def test_bm25_search_isolated_by_user(
 def test_chat_does_not_use_another_users_document(
     client: TestClient,
     fake_llm,
+    upload_ready_document,
 ) -> None:
     """用户 B 的 Chat 不得将用户 A 的资料组装进 Prompt。"""
     user_a_headers = _auth_headers(client, "chat-user-a@example.com")
     user_b_headers = _auth_headers(client, "chat-user-b@example.com")
 
     private_text = "用户A私有的Chat机密资料"
-    _upload(
-        client,
+    upload_ready_document(
         user_a_headers,
         "chat-private.txt",
         private_text,
@@ -178,14 +152,14 @@ def test_chat_does_not_use_another_users_document(
 def test_agent_rag_search_isolated_by_user(
     client: TestClient,
     fake_llm,
+    upload_ready_document,
 ) -> None:
     """用户 B 的 Agent rag_search 不得读取用户 A 的资料。"""
     user_a_headers = _auth_headers(client, "agent-user-a@example.com")
     user_b_headers = _auth_headers(client, "agent-user-b@example.com")
 
     private_text = "用户A私有的Agent检索资料"
-    _upload(
-        client,
+    upload_ready_document(
         user_a_headers,
         "agent-private.txt",
         private_text,

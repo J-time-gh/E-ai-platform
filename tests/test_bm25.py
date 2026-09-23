@@ -1,30 +1,8 @@
 """BM25 关键词检索测试：纯 CPU、无需 GPU，CI 可直接跑。"""
 
-import io
-
 from fastapi.testclient import TestClient
 
 from app.services.bm25 import tokenize
-
-
-def _upload(
-    client: TestClient,
-    headers: dict[str, str],
-    filename: str,
-    content: str,
-) -> None:
-    response = client.post(
-        "/documents/upload",
-        headers=headers,
-        files={
-            "file": (
-                filename,
-                io.BytesIO(content.encode()),
-                "text/plain",
-            ),
-        },
-    )
-    assert response.status_code == 201
 
 
 def _search(
@@ -58,21 +36,19 @@ def test_tokenize_splits_chinese_into_words() -> None:
 def test_bm25_finds_chunk_by_keyword(
     client: TestClient,
     authenticated_headers: dict[str, str],
+    upload_ready_document,
 ) -> None:
-    _upload(
-        client,
+    upload_ready_document(
         authenticated_headers,
         "a.txt",
         "科学实验是认识过程中的重要环节。",
     )
-    _upload(
-        client,
+    upload_ready_document(
         authenticated_headers,
         "b.txt",
         "商品的价值量由社会必要劳动时间决定。",
     )
-    _upload(
-        client,
+    upload_ready_document(
         authenticated_headers,
         "c.txt",
         "资本的有机构成随着积累而提高。",
@@ -91,52 +67,36 @@ def test_bm25_finds_chunk_by_keyword(
 def test_bm25_returns_empty_for_unrelated_query(
     client: TestClient,
     authenticated_headers: dict[str, str],
+    upload_ready_document,
 ) -> None:
-    _upload(
-        client,
+    upload_ready_document(
         authenticated_headers,
         "a.txt",
         "科学实验是认识过程中的重要环节。",
     )
 
-    assert (
-        _search(
-            client,
-            authenticated_headers,
-            "zzzqqq",
-        )
-        == []
-    )
+    assert _search(client, authenticated_headers, "zzzqqq") == []
 
 
 def test_bm25_index_rebuilds_after_upload(
     client: TestClient,
     authenticated_headers: dict[str, str],
+    upload_ready_document,
 ) -> None:
-    _upload(
-        client,
+    upload_ready_document(
         authenticated_headers,
         "a.txt",
         "科学实验是认识过程中的重要环节。",
     )
-    _upload(
-        client,
+    upload_ready_document(
         authenticated_headers,
         "b.txt",
         "商品的价值量由社会必要劳动时间决定。",
     )
 
-    assert (
-        _search(
-            client,
-            authenticated_headers,
-            "唯物论",
-        )
-        == []
-    )
+    assert _search(client, authenticated_headers, "唯物论") == []
 
-    _upload(
-        client,
+    upload_ready_document(
         authenticated_headers,
         "c.txt",
         "唯物论和唯心论的根本分歧。",
@@ -155,9 +115,9 @@ def test_bm25_index_rebuilds_after_upload(
 def test_vector_mode_remains_default(
     client: TestClient,
     authenticated_headers: dict[str, str],
+    upload_ready_document,
 ) -> None:
-    _upload(
-        client,
+    upload_ready_document(
         authenticated_headers,
         "a.txt",
         "苹果是一种水果。",
