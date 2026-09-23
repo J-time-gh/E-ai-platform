@@ -19,8 +19,11 @@ class Settings(BaseSettings):
     database_url: str
     test_database_url: str
     redis_url: str
-    # 7 天内命中直接复用
+    # Embedding 向量缓存：7 天
     redis_embedding_ttl_seconds: int = 604800
+    # SearchResult 缓存：60 秒
+    redis_search_ttl_seconds: int = 60
+    # Redis 连接与读写最长等待时间
     redis_socket_timeout_seconds: float = 1.0
 
     upload_dir: str = "data/uploads"

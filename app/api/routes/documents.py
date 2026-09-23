@@ -9,6 +9,7 @@ from app.schemas.documents import DocumentInfo
 from app.services import document_store, file_store
 from app.services.embedding import EmbedderDep
 from app.services.ingest import IngestError, ingest_document
+from app.services.search_cache import invalidate_search_cache
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -91,7 +92,10 @@ async def upload_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="文档处理失败，请稍后重试",
         ) from exc
-
+    # 上传文档后让当前用户缓存失效
+    invalidate_search_cache(
+        current_user.id,
+    )
     return result
 
 
@@ -145,6 +149,9 @@ async def delete_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="文档不存在",
         )
-
+    # 删除文档后让缓存失效
+    invalidate_search_cache(
+        current_user.id,
+    )
     if stored_path:
         file_store.delete_file(stored_path)
