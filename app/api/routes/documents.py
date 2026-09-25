@@ -33,6 +33,7 @@ def _cleanup_failed_upload(
 @router.post(
     "/upload",
     response_model=DocumentInfo,
+    # HTTP_202_ACCEPTED服务端已经接受请求，但处理尚未完成。
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def upload_document(
@@ -41,6 +42,7 @@ async def upload_document(
     current_user: CurrentUserDep,
     ingest_queue: IngestQueueDep,
 ) -> DocumentInfo:
+    #  API 层处理轻量校验
     filename = file.filename or "unnamed"
     suffix = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
 
@@ -57,7 +59,8 @@ async def upload_document(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="文件超过 20MB 限制",
         )
-
+    # 生成 UUID
+    # 此时文件已经落到服务器磁盘；即使 Worker 尚未启动，文件也不会丢失。
     document_id = str(uuid4())
     stored_path = file_store.save_file(
         document_id,
@@ -84,7 +87,10 @@ async def upload_document(
     )
 
     try:
+        # 队列里只传递 document_id，而不传文件二进制内容、数据库 Session、用户对象或 Embedding 模型
+        # Job 小；不承担文件存储；Worker 从数据库和磁盘按 ID 自己获取所需数据；易于重试、记录和排查。
         ingest_queue.enqueue(result.id)
+    # Redis/RQ 不可用时
     except QueueUnavailableError:
         document_store.mark_failed(
             db,

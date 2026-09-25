@@ -56,7 +56,9 @@ def _process_document(
     if user_id:
         invalidate_search_cache(user_id)
 
-
+# 生产入口 
+# RQ 调用的函数
+# Worker 是独立进程，不能复用 FastAPI 请求中的数据库 Session
 def process_document(document_id: str) -> None:
     """RQ 调用的生产环境入口。"""
     db = SessionLocal()

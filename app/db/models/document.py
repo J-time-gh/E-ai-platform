@@ -6,12 +6,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 
+# 数据库模型
 class Document(Base):
     """文档元数据表。"""
 
     __tablename__ = "documents"
 
     __table_args__ = (
+        # CheckConstraint数据库自身限制状态值，避免代码写入拼错的状态
         CheckConstraint(
             "status IN ('pending', 'processing', 'ready', 'failed')",
             name="ck_documents_status",

@@ -26,3 +26,6 @@ class SearchResult(BaseModel):
     chunk_index: int
     content: str
     score: float  # 相似度（1 - 余弦距离），越接近 1 越相关
+    # 后端依据 jieba 分词得出的、同时出现在查询和正文中的字面词元。
+    # 仅供前端展示高亮，不参与检索排序。
+    highlight_terms: list[str] = Field(default_factory=list)

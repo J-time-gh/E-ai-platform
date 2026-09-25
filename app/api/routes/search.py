@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.dependencies.auth import CurrentUserDep
+from app.core.config import settings
 from app.db.session import DbSession
 from app.schemas.search import SearchRequest, SearchResult
 from app.services import retrieval
@@ -26,5 +27,7 @@ async def search(
         request.top_k,
         request.mode,
         user_id=current_user.id,
+        min_score=settings.min_vector_score,
         reranker=reranker,
+        min_rerank_score=settings.min_rerank_score,
     )

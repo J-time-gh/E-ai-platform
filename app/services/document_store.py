@@ -117,6 +117,9 @@ def claim_for_ingest(
 ) -> Document | None:
     """原子认领一个 pending 文档，避免重复 Worker 同时处理。"""
     row = db.scalar(
+        # with_for_update() 会给这一行加数据库行锁
+        # 只允许 pending 状态被认领
+        # 避免了两个 Worker 同时处理同一个 Document
         select(Document).where(Document.id == document_id).with_for_update(),
     )
 
@@ -131,6 +134,7 @@ def claim_for_ingest(
     return row
 
 
+#
 def mark_ready(
     db: Session,
     document_id: str,
@@ -140,7 +144,7 @@ def mark_ready(
 
     if row is None:
         return None
-
+    # 只有成功后才使 Search Cache 失效，因为此刻知识库内容才真正发生变化
     row.status = "ready"
     row.ingest_error = None
     db.commit()

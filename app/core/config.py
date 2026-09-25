@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
-
+    # 队列名称默认
     ingest_queue_name: str = "document-ingest"
     ingest_job_timeout_seconds: int = 900
     ingest_stuck_after_seconds: int = 1800

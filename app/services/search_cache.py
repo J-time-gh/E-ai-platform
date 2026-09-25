@@ -23,7 +23,8 @@ class SearchCache:
     # 不同用户的缓存版本完全独立
     @staticmethod
     def _version_key(user_id: str) -> str:
-        return f"search-version:v1:{user_id}"
+        # v2 起缓存载荷包含 highlight_terms，避免复用旧结构的搜索结果。
+        return f"search-version:v2:{user_id}"
 
     def _get_version(
         self,
@@ -79,7 +80,7 @@ class SearchCache:
             ).encode(),
         ).hexdigest()
 
-        return f"search:v1:{user_id}:{version}:{fingerprint}"
+        return f"search:v2:{user_id}:{version}:{fingerprint}"
 
     def get(
         self,

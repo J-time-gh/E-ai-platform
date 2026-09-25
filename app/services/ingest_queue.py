@@ -20,6 +20,7 @@ class IngestQueue(Protocol):
         """投递文档入库任务，返回 RQ job ID。"""
 
 
+# 生产实现
 class RqIngestQueue:
     """生产环境的 RQ 队列实现。"""
 
@@ -44,6 +45,7 @@ class RqIngestQueue:
         return job.id
 
 
+# FastAPI 依赖注入
 @lru_cache(maxsize=1)
 def get_ingest_queue() -> IngestQueue:
     return RqIngestQueue()

@@ -27,6 +27,9 @@ def test_chat_returns_llm_reply_with_sources(
     assert body["model"] == settings.llm_model
     assert body["sources"][0]["filename"] == "ml.txt"
     assert body["sources"][0]["score"] > 0.99  # 同一文本 → 距离≈0
+    # ChatResponse 需要保留 SearchResult 的展示高亮元数据，供前端来源抽屉使用。
+    assert isinstance(body["sources"][0]["highlight_terms"], list)
+    assert body["sources"][0]["highlight_terms"]
 
 
 def test_chat_prompt_contains_retrieved_chunk(

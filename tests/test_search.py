@@ -1,6 +1,8 @@
 import httpx
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
+
 
 def _search(
     client: TestClient,
@@ -69,6 +71,33 @@ def test_search_no_documents_returns_empty(
     authenticated_headers: dict[str, str],
 ) -> None:
     assert _search(client, authenticated_headers, "随便问问").json() == []
+
+
+def test_search_applies_rerank_gate(
+    client: TestClient,
+    authenticated_headers: dict[str, str],
+    upload_ready_document,
+    monkeypatch,
+) -> None:
+    upload_ready_document(
+        authenticated_headers,
+        "capital.txt",
+        "资本论讨论商品、货币和资本的关系。",
+    )
+    monkeypatch.setattr(settings, "min_rerank_score", 0.5)
+
+    response = client.post(
+        "/search",
+        headers=authenticated_headers,
+        json={
+            "query": "年薪是多少？",
+            "top_k": 5,
+            "mode": "hybrid_rerank",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 def test_search_rejects_empty_query(

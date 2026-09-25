@@ -9,6 +9,7 @@ from app.schemas.search import SearchResult
 from app.services.bm25 import get_bm25_index
 from app.services.embedding import Embedder
 from app.services.fusion import merge_candidates, rrf_fuse
+from app.services.highlight import matched_query_terms
 from app.services.reranker import Reranker, rerank
 from app.services.search_cache import get_search_cache
 
@@ -178,7 +179,20 @@ def search_with_mode(
                     min_rerank_score,
                 )
 
-    # 4. Redis 写入失败不会影响本次正常检索结果。
+    # 4. 检索完成后才生成展示用高亮词；不改变召回、排序或门控。
+    results = [
+        result.model_copy(
+            update={
+                "highlight_terms": matched_query_terms(
+                    query,
+                    result.content,
+                ),
+            },
+        )
+        for result in results
+    ]
+
+    # 5. Redis 写入失败不会影响本次正常检索结果。
     search_cache.set(
         cache_key,
         results,

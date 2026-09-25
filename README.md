@@ -1,8 +1,8 @@
 # Enterprise AI Platform
 
-> 企业级 AI 应用后端：RAG 知识库问答 · Agent 工具调用
+> 企业级 AI 应用平台：RAG 知识库问答 · Agent 工具调用 · 轻量 Web 前端 MVP
 >
-> A backend-first enterprise AI platform featuring RAG and tool-using Agents.
+> A backend-first enterprise AI platform with RAG, tool-using Agents, and a lightweight web UI MVP.
 
 [![CI](https://github.com/J-time-gh/E-ai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/J-time-gh/E-ai-platform/actions/workflows/ci.yml)
 
@@ -15,8 +15,9 @@
 - 模型服务兼容 LM Studio / vLLM 提供的 OpenAI 兼容接口
 - 工程化基础：Docker Compose、pytest、Ruff、GitHub Actions 和检索/Agent 评测
 
-> 当前没有正式前端、Redis 限流、结构化日志、压测、监控或完整 LLM Gateway。
-> 已具备 JWT 用户认证与隔离、会话持久化、Redis 两层缓存，以及 RQ Worker 驱动的异步文档入库 MVP。
+> 当前已有轻量前端 MVP（尚非完整正式前端）；Redis 限流、结构化日志、压测、监控和完整 LLM Gateway 尚未完成。
+> 后端已具备 JWT 用户认证与隔离、会话持久化、Redis 两层缓存，以及 RQ Worker 驱动的异步文档入库 MVP。
+> 前端 MVP 已支持聊天会话列表和历史消息恢复；历史会话目前保存问答文本，不持久化引用资料卡片。
 
 ## 技术栈
 
@@ -29,7 +30,7 @@
 | 检索 | 向量检索 + BM25 + RRF 融合 + CrossEncoder 精排（阶段 4） |
 | 模型服务 | LM Studio / vLLM（OpenAI 兼容接口） |
 | Agent | LangGraph；RAG、受限 SQL 与安全数学表达式工具（阶段 5） |
-| 前端 | 暂无正式前端 |
+| 前端 | 无构建依赖 HTML/CSS/JavaScript MVP；FastAPI 提供 `/ui/`，含 JWT 登录、文档管理、搜索及持久化聊天会话 |
 | 工程化 | Docker Compose、pytest、Ruff、GitHub Actions |
 
 ## 快速开始
@@ -59,17 +60,28 @@ pending → processing → ready
                     ↘ failed
 ```
 
+### 前端 MVP
+
+FastAPI 在 `/ui/` 提供无构建依赖的 HTML/CSS/JavaScript 页面，不需要 Node.js 或 npm。当前支持：
+
+- JWT 注册、登录与退出；文档上传、状态轮询、列表和删除。
+- 向量、BM25、混合与混合重排四种搜索模式。
+- 聊天会话列表、新建/切换/删除，以及从服务端恢复历史问答文本。
+- 历史消息当前只持久化用户问题和助手回答；引用资料卡片（`sources`）尚未存入会话记录，重新打开历史会话时不会恢复引用卡片。
+
+更多启动说明见 [`frontend/README.md`](frontend/README.md)。
 
 ## 项目结构
 
 ```
 app/
-├── main.py              # FastAPI 应用入口
+├── main.py              # FastAPI 应用入口；静态前端挂载于 /ui/
 ├── core/                # 核心配置（settings）
 ├── api/routes/          # 协议层：health / chat / documents / search / agent
 ├── schemas/             # 契约层：Pydantic 请求与响应模型
 ├── services/            # 业务层：检索 / 融合 / 精排 / 入库 / RAG / Agent
 └── db/                  # 数据层：SQLAlchemy 模型、会话与事务
+frontend/                # 无构建依赖的 HTML/CSS/JavaScript 前端 MVP
 tests/                   # pytest 自动化测试（以实际测试输出为准）
 evals/                   # RAG 与 Agent 评测题库、脚本及结果（结果可能含敏感内容）
 .github/workflows/       # GitHub Actions CI
@@ -149,6 +161,8 @@ Agent 应直接拒绝文件读取、网络请求、系统命令和其他危险�
 - [x] 阶段 4：Hybrid Retrieval（BM25 + RRF + CrossEncoder 精排）+ 检索评测
 - [x] 阶段 5：Agent 核心能力（LangGraph + RAG / 受限 SQL / 安全数学表达式工具；多步端到端验收暂缓）
 - [ ] 阶段 6：安全与工程化（JWT、用户隔离、缓存、异步任务、压测）
+  - 已完成：JWT 用户隔离、会话历史持久化、Embedding/Search 两层缓存、RQ 异步入库 MVP；另有轻量前端 MVP 支持历史会话显示。
+  - 待完成/延期：Redis 限流（主动延期）、结构化日志、压测、Worker 中断恢复与自动重试；阶段 6 整体尚未最终验收。
 - [ ] 阶段 7：vLLM 本地推理与性能测试
 - [ ] 阶段 8：LLM Gateway（多模型路由/重试/限流/成本统计）
 - [ ] 阶段 9：Evaluation & Monitoring（Langfuse/Prometheus + Grafana）

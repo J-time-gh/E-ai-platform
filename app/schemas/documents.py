@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+# 数据库文档状态定义
 DocumentStatus = Literal[
     "pending",
     "processing",
